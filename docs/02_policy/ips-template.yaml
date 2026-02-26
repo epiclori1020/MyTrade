@@ -1,0 +1,99 @@
+# ============================================================
+# Investment Policy Statement — MyTrade v1
+# ============================================================
+# FALLBACK & DEFAULT VALUES.
+# Die Policy Engine liest primär aus der `user_policy` Tabelle
+# (siehe docs/02_policy/settings-spec.md).
+# Dieses YAML wird verwendet wenn:
+#   1. DB nicht erreichbar ist (Fallback)
+#   2. Neuer User ohne Policy-Eintrag (Defaults = Balanced Preset)
+# Änderungen an Presets: siehe settings-spec.md
+# Letzte Aktualisierung: 2026-02-26
+# ============================================================
+
+investor:
+  name: "Arwin"
+  risk_profile: "moderate-conservative"
+  investment_horizon_years: 10
+  tax_residency: "AT"
+  kest_rate: 0.275                    # 27.5% KESt Österreich
+
+# ---- ALLOKATION ----
+allocation:
+  core_pct: 70                        # Passiv, ETF-Sparplan auf Flatex
+  satellite_pct: 30                   # Aktiv, system-managed
+  # core_pct + satellite_pct = 100
+
+# ---- CORE (außerhalb des Systems, manuell auf Flatex.at) ----
+core:
+  broker: "flatex_at"
+  managed_by_system: false            # System hat KEINEN Zugriff
+  instruments:
+    - ticker: "VWCE.DE"               # Vanguard FTSE All-World UCITS (thes.)
+      isin: "IE00BK5BQT80"
+      target_pct: 40                  # 40% des Gesamtportfolios
+      exchange: "XETRA"
+    - ticker: "CSPX.L"               # iShares Core S&P 500 UCITS (thes.)
+      isin: "IE00B5BMR087"
+      target_pct: 30                  # 30% des Gesamtportfolios
+      exchange: "LSE"
+  rebalance_trigger_pct: 5            # Rebalance wenn >5% Drift vom Target
+
+# ---- SATELLITE (system-managed) ----
+satellite:
+  max_single_position_pct: 5          # Max 5% des Satellite pro Einzeltitel
+  max_sector_concentration_pct: 30    # Max 30% des Satellite in einem Sektor
+  max_trades_per_month: 10
+  cash_reserve_pct: 5                 # Immer min. 5% Cash im Satellite
+
+  allowed_types:
+    - "stock"
+    - "etf"
+
+  forbidden_types:
+    - "options"
+    - "futures"
+    - "crypto"
+    - "leveraged_etf"
+    - "inverse_etf"
+    - "penny_stock"                   # < $5
+    - "spac"
+
+  allowed_regions:
+    - region: "US"
+      instruments: ["stock", "etf"]
+      max_pct: 100                    # Keine Regionsbeschränkung für US
+    - region: "EU"
+      instruments: ["stock", "etf"]
+      max_pct: 50
+    - region: "EM"
+      instruments: ["etf"]            # NUR ETF, keine Einzelaktien
+      max_pct: 15                     # Max 15% des Satellite
+
+# ---- RISIKOMANAGEMENT ----
+risk:
+  max_portfolio_drawdown_pct: 20      # Kill-Switch: System stoppt bei 20% Drawdown
+  stop_loss:
+    type: "soft_flag"                 # Kein Auto-Sell
+    threshold_pct: 15                 # Flag bei 15% Verlust + Review auslösen
+    action: "flag_for_review"         # Devil's Advocate prüft ob These intakt
+  rebalance_trigger_pct: 5            # Ab 5% Drift → Rebalancing vorschlagen
+
+# ---- EXECUTION RULES ----
+execution:
+  maturity_stage: 1                   # 0=Advisory, 1=Paper, 2=Human-Confirm, 3=Auto
+  paper_broker: "alpaca_paper"
+  live_broker: "ibkr"                 # Erst ab Stufe 2
+  human_confirm_required: true        # Stufe 1+2: Immer
+
+# ---- REVIEW ----
+review:
+  frequency: "quarterly"
+  next_review: "2026-06-01"
+  review_checklist:
+    - "IPS-Compliance prüfen"
+    - "Drift-Analyse vs. Target"
+    - "Performance vs. Benchmark (VWCE)"
+    - "Verification-Rate prüfen (Ziel: >85%)"
+    - "Fehler-Rate prüfen (Ziel: <5%)"
+    - "Kosten-Review (innerhalb Budget-Cap?)"

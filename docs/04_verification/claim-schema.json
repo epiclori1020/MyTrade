@@ -1,0 +1,160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VerifiedClaim",
+  "description": "Schema for claims extracted from agent outputs. The Verification Layer validates each claim against the tier system before it reaches the frontend or trade plan.",
+  "type": "object",
+  "required": ["claim_id", "claim_text", "claim_type", "value", "ticker", "source_primary", "tier", "required_tier", "status"],
+  "properties": {
+    "claim_id": {
+      "type": "string",
+      "description": "Unique ID: {analysis_run_id}_{sequential_number}",
+      "pattern": "^[a-f0-9-]+_\\d+$",
+      "examples": ["a1b2c3d4-e5f6_001"]
+    },
+    "claim_text": {
+      "type": "string",
+      "description": "Human-readable claim as stated by the agent",
+      "examples": ["AAPL Revenue Q4 2025: $124.3B"]
+    },
+    "claim_type": {
+      "type": "string",
+      "enum": ["number", "ratio", "event", "opinion", "forecast"],
+      "description": "number=hard fact (revenue, EPS), ratio=calculated (P/E, EV/EBITDA), event=something happened (merger, earnings beat), opinion=subjective (bullish outlook), forecast=prediction (revenue growth 15%)"
+    },
+    "value": {
+      "type": ["number", "string", "null"],
+      "description": "The claimed value. Number for numeric claims, string for events/opinions, null if not applicable."
+    },
+    "unit": {
+      "type": "string",
+      "description": "Unit of the value",
+      "examples": ["USD", "USD_B", "pct", "ratio", "date", "text"]
+    },
+    "ticker": {
+      "type": "string",
+      "description": "Stock/ETF ticker symbol",
+      "examples": ["AAPL", "MSFT", "VOO"]
+    },
+    "period": {
+      "type": "string",
+      "description": "Time period the claim refers to",
+      "examples": ["Q4-2025", "FY2025", "TTM", "current", "2025-01-15"]
+    },
+    "source_primary": {
+      "type": "object",
+      "description": "The original data source used by the agent",
+      "required": ["provider", "retrieved_at"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["finnhub", "alpha_vantage", "fred", "sec_edgar", "openbb", "yahoo_finance", "calculated"],
+          "description": "Data provider name"
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "Specific API endpoint or data path",
+          "examples": ["/stock/metric?symbol=AAPL", "10-K/2025"]
+        },
+        "retrieved_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the data was fetched"
+        }
+      }
+    },
+    "source_verification": {
+      "type": ["object", "null"],
+      "description": "Second source used for cross-check. Null if not yet verified.",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "Verification data provider"
+        },
+        "value": {
+          "type": ["number", "string", "null"],
+          "description": "Value from verification source"
+        },
+        "deviation_pct": {
+          "type": ["number", "null"],
+          "description": "Percentage deviation from primary. null if not numeric."
+        },
+        "retrieved_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["A", "B", "C"],
+      "description": "Actual evidence tier achieved. A=primary/auditable (SEC filing, FRED), B=two aggregators consistent, C=single source/hint"
+    },
+    "required_tier": {
+      "type": "string",
+      "enum": ["A", "A+B", "B", "C"],
+      "description": "Minimum tier required based on usage. Trade-critical numbers need A or A+B. Context numbers need B. Sentiment needs C."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["verified", "consistent", "unverified", "disputed", "manual_check"],
+      "description": "verified=Tier A confirmed (<5% deviation), consistent=2 aggregators agree, unverified=single source only, disputed=>5% deviation (RED FLAG), manual_check=Tier B available but claim is trade-critical (needs A)"
+    },
+    "trade_critical": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, this claim directly influences buy/sell/hold decision. Disputed trade-critical claims BLOCK the trade plan."
+    },
+    "confidence_adjustment": {
+      "type": "integer",
+      "default": 0,
+      "description": "Points adjustment to overall analysis confidence. negative=reduces confidence. e.g. -15 for trade-critical claim with only Tier B."
+    }
+  },
+  "examples": [
+    {
+      "claim_id": "abc123_001",
+      "claim_text": "AAPL Revenue FY2025: $394.3B",
+      "claim_type": "number",
+      "value": 394300000000,
+      "unit": "USD",
+      "ticker": "AAPL",
+      "period": "FY2025",
+      "source_primary": {
+        "provider": "finnhub",
+        "endpoint": "/stock/metric?symbol=AAPL",
+        "retrieved_at": "2026-02-26T10:00:00Z"
+      },
+      "source_verification": {
+        "provider": "sec_edgar",
+        "value": 395100000000,
+        "deviation_pct": 0.2,
+        "retrieved_at": "2026-02-26T10:01:00Z"
+      },
+      "tier": "A",
+      "required_tier": "A",
+      "status": "verified",
+      "trade_critical": true,
+      "confidence_adjustment": 0
+    },
+    {
+      "claim_id": "abc123_002",
+      "claim_text": "AAPL is well-positioned for AI integration",
+      "claim_type": "opinion",
+      "value": null,
+      "unit": "text",
+      "ticker": "AAPL",
+      "period": "current",
+      "source_primary": {
+        "provider": "finnhub",
+        "endpoint": "/news?symbol=AAPL",
+        "retrieved_at": "2026-02-26T10:02:00Z"
+      },
+      "source_verification": null,
+      "tier": "C",
+      "required_tier": "C",
+      "status": "unverified",
+      "trade_critical": false,
+      "confidence_adjustment": 0
+    }
+  ]
+}

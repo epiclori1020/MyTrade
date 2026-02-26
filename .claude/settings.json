@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "grep -rn 'SUPABASE_SERVICE_ROLE\\|ALPACA_SECRET\\|ANTHROPIC_API_KEY\\|ALPACA_API_KEY\\|FINNHUB_API_KEY\\|ALPHA_VANTAGE_API_KEY' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' frontend/ 2>/dev/null && echo '⚠️  WARNING: API key reference found in frontend code!' || true"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)"
+    ]
+  }
+}

@@ -13,6 +13,9 @@ def _get_rate_limit_key(request: Request) -> str:
     user = getattr(request.state, "user", None)
     if user and isinstance(user, dict) and "id" in user:
         return user["id"]
+    # Behind a reverse proxy (Railway), request.client may be the proxy IP.
+    # For production: configure Starlette's ProxyHeadersMiddleware to read
+    # X-Forwarded-For, or switch to a trusted header-based key.
     return request.client.host if request.client else "unknown"
 
 

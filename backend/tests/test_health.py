@@ -126,55 +126,60 @@ def test_error_response_has_required_fields():
 # 6. Protected endpoint requires auth
 # ---------------------------------------------------------------------------
 
-def test_protected_endpoint_requires_auth():
-    """A protected route (using Depends(get_current_user)) should return 401/403
-    when no Authorization header is provided."""
-
-    # Register a temporary protected route for this test
+@pytest.fixture
+def protected_client():
+    """Client with a temporary protected route registered."""
     @app.get("/test-protected")
     def _protected_route(user: dict = Depends(get_current_user)):
         return {"user": user}
 
     client = _make_client()
-    try:
-        response = client.get("/test-protected")
-        # HTTPBearer returns 401 or 403 depending on FastAPI version
-        assert response.status_code in (401, 403)
-    finally:
-        # Remove the temporary route
-        app.routes[:] = [r for r in app.routes if getattr(r, "path", None) != "/test-protected"]
-        _cleanup_client(client)
+    yield client
+
+    app.routes[:] = [r for r in app.routes if getattr(r, "path", None) != "/test-protected"]
+    _cleanup_client(client)
+
+
+def test_protected_endpoint_requires_auth(protected_client):
+    """A protected route (using Depends(get_current_user)) should return 401/403
+    when no Authorization header is provided."""
+    response = protected_client.get("/test-protected")
+    # HTTPBearer returns 401 or 403 depending on FastAPI version
+    assert response.status_code in (401, 403)
 
 
 # ---------------------------------------------------------------------------
 # 7. Rate limit returns 429
 # ---------------------------------------------------------------------------
 
-def test_rate_limit_returns_429():
-    """A rate-limited route should eventually return 429."""
-
-    # Register a temporary rate-limited route
+@pytest.fixture
+def rate_limited_client():
+    """Client with a temporary rate-limited route registered."""
     @app.get("/test-rate-limited")
     @limiter.limit("2/minute")
     def _rate_limited_route(request: Request):
         return {"ok": True}
 
     client = _make_client()
-    try:
-        # First 2 requests should succeed
-        for _ in range(2):
-            resp = client.get("/test-rate-limited")
-            assert resp.status_code == 200
+    yield client
 
-        # Third request should be rate-limited
-        resp = client.get("/test-rate-limited")
-        assert resp.status_code == 429
-        data = resp.json()
-        assert data["error"] == "rate_limit_exceeded"
-        assert data["status_code"] == 429
-    finally:
-        app.routes[:] = [r for r in app.routes if getattr(r, "path", None) != "/test-rate-limited"]
-        _cleanup_client(client)
+    app.routes[:] = [r for r in app.routes if getattr(r, "path", None) != "/test-rate-limited"]
+    _cleanup_client(client)
+
+
+def test_rate_limit_returns_429(rate_limited_client):
+    """A rate-limited route should eventually return 429."""
+    # First 2 requests should succeed
+    for _ in range(2):
+        resp = rate_limited_client.get("/test-rate-limited")
+        assert resp.status_code == 200
+
+    # Third request should be rate-limited
+    resp = rate_limited_client.get("/test-rate-limited")
+    assert resp.status_code == 429
+    data = resp.json()
+    assert data["error"] == "rate_limit_exceeded"
+    assert data["status_code"] == 429
 
 
 # ---------------------------------------------------------------------------

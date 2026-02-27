@@ -1,9 +1,20 @@
-from fastapi import Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.services.supabase import get_supabase_client
 
 security = HTTPBearer()
+
+
+def authenticated_router(**kwargs) -> APIRouter:
+    """APIRouter with get_current_user applied to all routes.
+
+    Use this for all authenticated endpoints (Step 4+).
+    Public endpoints (like /health) should use plain APIRouter().
+    """
+    deps = list(kwargs.pop("dependencies", []))
+    deps.append(Depends(get_current_user))
+    return APIRouter(dependencies=deps, **kwargs)
 
 
 def get_current_user(

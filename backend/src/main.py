@@ -14,14 +14,13 @@ from src.routes import health
 
 logger = logging.getLogger(__name__)
 
+# Fail-fast: validates required env vars on import. Reused for CORS + lifespan.
+settings = get_settings()
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Startup/shutdown lifecycle.
-
-    On startup: validate settings (fail-fast if env vars are missing).
-    """
-    settings = get_settings()
+    """Startup/shutdown lifecycle."""
     logging.basicConfig(level=settings.log_level)
     logger.info("MyTrade API starting (environment=%s)", settings.environment)
     yield
@@ -40,7 +39,6 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # --- CORS ---
-settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

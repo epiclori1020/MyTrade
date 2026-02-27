@@ -3,18 +3,9 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from src.config import Settings, get_settings
+from src.config import get_settings
 from src.main import app
-
-
-def _test_settings() -> Settings:
-    """Settings override for tests. No real env vars needed."""
-    return Settings(
-        supabase_url="https://test.supabase.co",
-        supabase_anon_key="test-anon-key",
-        supabase_service_role_key="test-service-role-key",
-        cors_origins="http://localhost:3000",
-    )
+from tests.helpers import make_test_settings
 
 
 @pytest.fixture
@@ -24,11 +15,11 @@ def client():
     Patches get_settings globally so no real .env is needed,
     and patches Supabase client creation so no real connection is attempted.
     """
-    app.dependency_overrides[get_settings] = _test_settings
+    app.dependency_overrides[get_settings] = make_test_settings
 
     with (
-        patch("src.config.get_settings", return_value=_test_settings()),
-        patch("src.services.supabase.get_settings", return_value=_test_settings()),
+        patch("src.config.get_settings", return_value=make_test_settings()),
+        patch("src.services.supabase.get_settings", return_value=make_test_settings()),
         patch("src.services.supabase.create_client") as mock_create,
     ):
         mock_create.return_value = None

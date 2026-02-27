@@ -1,6 +1,10 @@
+import logging
+
 from supabase import Client, create_client
 
 from src.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 # Module-level clients: lazy-initialized on first access
 _supabase_client: Client | None = None
@@ -44,4 +48,5 @@ def check_db_health() -> bool:
         admin.table("user_policy").select("id").limit(1).execute()
         return True
     except Exception:
+        logger.warning("DB health check failed", exc_info=True)
         return False

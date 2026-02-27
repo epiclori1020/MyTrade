@@ -5,30 +5,22 @@ from fastapi import Depends, Request
 from fastapi.testclient import TestClient
 from slowapi.errors import RateLimitExceeded
 
-from src.config import Settings, get_settings
+from src.config import get_settings
 from src.dependencies.auth import get_current_user
 from src.dependencies.rate_limit import limiter
 from src.main import app
+from tests.helpers import make_test_settings
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _test_settings() -> Settings:
-    return Settings(
-        supabase_url="https://test.supabase.co",
-        supabase_anon_key="test-anon-key",
-        supabase_service_role_key="test-service-role-key",
-        cors_origins="http://localhost:3000",
-    )
-
-
 def _make_client(db_healthy: bool = True) -> TestClient:
     """Create a test client with DB health mocked to the given value."""
-    app.dependency_overrides[get_settings] = _test_settings
+    app.dependency_overrides[get_settings] = make_test_settings
 
-    patcher_settings = patch("src.services.supabase.get_settings", return_value=_test_settings())
+    patcher_settings = patch("src.services.supabase.get_settings", return_value=make_test_settings())
     patcher_create = patch("src.services.supabase.create_client")
     # Patch where check_db_health is USED (health.py), not where it's defined
     patcher_health = patch("src.routes.health.check_db_health", return_value=db_healthy)

@@ -13,13 +13,13 @@
 
 ### Step 1: Docs lesen + Agno recherchieren
 
-- [ ] Lies die 6 Pflichtdokumente (siehe master-prompt.md "Dein Repo")
-- [ ] Recherchiere Agno's aktuelle API via Context7 MCP (`use context7`):
+- [x] Lies die 6 Pflichtdokumente (siehe master-prompt.md "Dein Repo")
+- [x] Recherchiere Agno's aktuelle API via Context7 MCP (`use context7`):
   - Agent-Erstellung (System-Prompt, Tools, Model-Parameter)
   - `coordinate` Mode (Team Leader + Member Agents)
   - Tool-Integration (Supabase, HTTP APIs)
   - PostgreSQL-Storage für Agent Memory/Sessions
-- [ ] Dokumentiere API-Patterns in einer kurzen Notiz für spätere Steps
+- [x] Dokumentiere API-Patterns in einer kurzen Notiz für spätere Steps
 
 ### Step 2: Supabase-Projekt + Auth + DB-Migrationen
 

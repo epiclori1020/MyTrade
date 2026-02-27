@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.services.supabase import get_supabase_client
@@ -7,6 +7,7 @@ security = HTTPBearer()
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> dict:
     """Validate JWT token via Supabase Auth and return the authenticated user.
@@ -32,7 +33,9 @@ def get_current_user(
                 detail="Invalid or expired token",
             )
 
-        return {"id": str(user.id), "email": user.email}
+        user_data = {"id": str(user.id), "email": user.email}
+        request.state.user = user_data
+        return user_data
 
     except HTTPException:
         raise

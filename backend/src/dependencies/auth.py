@@ -44,6 +44,12 @@ def get_current_user(
                 detail="Invalid or expired token",
             )
 
+        if not user.email:
+            raise HTTPException(
+                status_code=401,
+                detail="User email required",
+            )
+
         user_data = {"id": str(user.id), "email": user.email}
         request.state.user = user_data
         return user_data

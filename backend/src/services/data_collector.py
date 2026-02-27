@@ -18,10 +18,12 @@ from src.services.supabase import get_supabase_admin
 logger = logging.getLogger(__name__)
 
 # Columns that exist in stock_fundamentals table (for filtering before DB write)
+# Includes fetched_at so upserts update the timestamp on re-fetch.
 FUNDAMENTALS_DB_COLUMNS = {
     "ticker", "period", "revenue", "net_income", "free_cash_flow",
     "total_debt", "total_equity", "eps", "pe_ratio", "pb_ratio",
     "ev_ebitda", "roe", "roic", "f_score", "z_score", "source",
+    "fetched_at",
 }
 
 # Columns that exist in stock_prices table
@@ -242,6 +244,9 @@ def _write_prices(
     candles: list[dict], quote: dict | None, result: CollectionResult,
 ) -> None:
     """Write candles + quote to stock_prices table in batches."""
+    if not candles and not quote:
+        return
+
     admin = get_supabase_admin()
     total_written = 0
 

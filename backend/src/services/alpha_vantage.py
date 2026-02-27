@@ -106,6 +106,7 @@ class AlphaVantageClient:
         return {
             "ticker": ticker,
             "period": period,
+            "fetched_at": now.isoformat(),
             "revenue": _safe_int(data.get("RevenueTTM")),
             "net_income": None,  # Not available in OVERVIEW
             "free_cash_flow": None,  # Not available in OVERVIEW

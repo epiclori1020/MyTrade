@@ -131,6 +131,7 @@ class FinnhubClient:
         return {
             "ticker": ticker,
             "period": period,
+            "fetched_at": now.isoformat(),
             "revenue": revenue,
             "net_income": net_income,
             "free_cash_flow": free_cash_flow,

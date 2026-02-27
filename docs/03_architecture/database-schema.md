@@ -272,16 +272,21 @@ CREATE TABLE error_log (
   resolved BOOLEAN DEFAULT false
 );
 
--- API-Kosten-Tracking
+-- API-Kosten-Tracking (3-Tier Model-Mix)
 CREATE TABLE agent_cost_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   analysis_id UUID REFERENCES analysis_runs(id),
   timestamp TIMESTAMPTZ DEFAULT NOW(),
   agent_name VARCHAR(50) NOT NULL,
-  model VARCHAR(30) NOT NULL,
+  model VARCHAR(50) NOT NULL,                              -- e.g. 'claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5'
+  tier VARCHAR(10) NOT NULL CHECK (tier IN ('heavy', 'standard', 'light')),
+  effort VARCHAR(10) DEFAULT 'medium' CHECK (effort IN ('low', 'medium', 'high')),
   input_tokens INTEGER NOT NULL,
   output_tokens INTEGER NOT NULL,
-  cost_usd DECIMAL(8,4) NOT NULL
+  cache_read_tokens INTEGER DEFAULT 0,                     -- Tokens aus Prompt Cache (90% günstiger)
+  cost_usd DECIMAL(8,4) NOT NULL,
+  fallback_from VARCHAR(50),                               -- NULL = Default-Modell, sonst: z.B. 'claude-haiku-4-5' (Quality-Fallback)
+  degraded BOOLEAN DEFAULT false                           -- true = Budget-Fallback aktiv
 );
 
 -- Lern-Modus Fortschritt

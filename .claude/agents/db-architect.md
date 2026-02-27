@@ -3,6 +3,7 @@ name: db-architect
 description: 'Supabase PostgreSQL schema design, migrations, and RLS policies. Use for database changes, new tables, and security policies.'
 tools: Read, Write, Edit, Bash, Grep
 model: sonnet
+maxTurns: 20
 ---
 You are a database architect specializing in Supabase PostgreSQL.
 

@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=$(echo \"$TOOL_INPUT\" | python3 -c \"import sys,json; print(json.load(sys.stdin).get('command',''))\" 2>/dev/null || echo \"$TOOL_INPUT\"); echo \"$CMD\" | grep -qiE '(rm\\s+-(r)?f\\s+/|rm\\s+-f\\s*-r\\s+/|DROP\\s+TABLE|DROP\\s+DATABASE|TRUNCATE\\s+TABLE|git\\s+push\\s+.*--force\\s+(origin\\s+)?(main|master))' && echo \"BLOCKED: Destructive command detected: $CMD\" && exit 1 || true"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",

@@ -9,8 +9,12 @@
       "args": ["-y", "@upstash/context7-mcp"]
     },
     "figma": {
-      "command": "npx",
-      "args": ["-y", "@anthropic-ai/figma-mcp"]
+      "type": "http",
+      "url": "https://mcp.figma.com/mcp"
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp"
     }
   }
 }

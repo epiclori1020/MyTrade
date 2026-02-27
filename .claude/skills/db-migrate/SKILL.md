@@ -1,6 +1,7 @@
 ---
 name: db-migrate
 description: 'Create a new Supabase migration file with proper timestamp, SQL schema, RLS policies, and indexes. Use when the database schema needs changes.'
+context: fork
 allowed-tools: Read, Write, Bash
 disable-model-invocation: true
 ---

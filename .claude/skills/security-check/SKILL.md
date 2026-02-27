@@ -1,6 +1,7 @@
 ---
 name: security-check
 description: 'Run a security audit checking for exposed API keys, RLS gaps, and CORS misconfigurations. Use before committing or deploying.'
+context: fork
 disable-model-invocation: true
 ---
 Run a security audit using the security-reviewer agent:

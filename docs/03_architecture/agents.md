@@ -7,20 +7,29 @@
 
 ## Übersicht
 
-Das System verwendet 8 spezialisierte Agenten, organisiert als Agno-Team mit dem Portfolio Synthesizer als Team Leader. 4 Agenten laufen auf Opus (kritische Analyse), 3 auf Sonnet (kosteneffizient), 1 ist deterministisch (kein LLM).
+Das System verwendet 10 spezialisierte Agenten, organisiert als Agno-Team mit dem Portfolio Synthesizer als Team Leader. Die Agenten nutzen einen **3-Tier Model-Mix** für optimale Kosten/Qualität:
 
-| # | Agent | LLM | Token-Budget | Rolle |
-|---|-------|-----|-------------|-------|
-| 1 | Data Collector | — (deterministisch) | 0 | API-Calls, Daten in DB schreiben |
-| 2 | Macro Analyst | Opus 4.6 | ~15K | Makro-Regime, Sektor-Bewertung |
-| 3 | Fundamental Analyst | Opus 4.6 | ~30K | Geschäftsmodell, Finanzen, Bewertung |
-| 4 | Technical Analyst | Sonnet 4.5 | ~10K | Trend, Indikatoren, Levels |
-| 5 | Sentiment Analyst | Sonnet 4.5 | ~8K | News, Insider, Analyst-Consensus |
-| 6 | Risk Manager | Opus 4.6 | ~12K | IPS-Prüfung, Positionsgröße, Risiken |
-| 7 | Devil's Advocate | Opus 4.6 | ~15K | Gegenargumente, Worst-Case |
-| 8 | Portfolio Synthesizer | Opus 4.6 | ~10K | Investment Note, Empfehlung (Team Leader) |
+- **Heavy (Opus):** High-Stakes Reasoning — Gegenargumente, finale Synthese
+- **Standard (Sonnet):** Workhorse — Analyse-Agenten mit solidem Reasoning
+- **Light (Haiku):** Strukturierte Subtasks — Extraktion, Verification, Klassifikation
+- **Kein LLM:** Deterministische Code-Logik — Policy Engine, Data Collector, Monitoring-Checks
 
-**Gesamt pro Analyse:** ~100K Token verteilt auf 6 fokussierte LLM-Calls
+| # | Agent | Modell (API-String) | Tier | Token-Budget | Rolle |
+|---|-------|-------------------|------|-------------|-------|
+| 1 | Data Collector | — (deterministisch) | Kein LLM | 0 | API-Calls, Daten in DB schreiben |
+| 2 | Macro Analyst | `claude-sonnet-4-6` | Standard | ~15K | Makro-Regime, Sektor-Bewertung |
+| 3 | Fundamental Analyst | `claude-sonnet-4-6` | Standard | ~30K | Geschäftsmodell, Finanzen, Bewertung |
+| 4 | Technical Analyst | `claude-sonnet-4-6` | Standard | ~10K | Trend, Indikatoren, Levels |
+| 5 | Sentiment Analyst | `claude-sonnet-4-6` | Standard | ~8K | News, Insider, Analyst-Consensus |
+| 6 | Risk Manager | `claude-sonnet-4-6` | Standard | ~12K | IPS-Prüfung, Positionsgröße, Risiken |
+| 7 | Devil's Advocate | `claude-opus-4-6` | Heavy | ~15K | Gegenargumente, Worst-Case |
+| 8 | Portfolio Synthesizer | `claude-opus-4-6` | Heavy | ~10K | Investment Note, Empfehlung (Team Leader) |
+| 9 | Claim Extractor | `claude-haiku-4-5` | Light | ~5K | Claims aus Agent-Outputs extrahieren (JSON) |
+| 10 | Verification Agent | `claude-haiku-4-5` | Light | ~3K | Cross-Check Zahlen gegen 2. Quelle |
+
+**Gesamt pro Analyse:** ~110K Token verteilt auf 8 LLM-Calls + 2 deterministische Steps
+
+> **Begründung 3-Tier:** Opus für Tasks die nuanciertes Gegenargument-Reasoning brauchen (Devil's Advocate muss die Investment-These "zerstören", Synthesizer muss alle Perspektiven abwägen). Sonnet für Analyse-Agents die solides Reasoning brauchen aber keine extreme Tiefe. Haiku für strukturierte, schema-gebundene Extraktion und Zahlenvergleiche wo Geschwindigkeit und Kosten wichtiger sind als Reasoning-Tiefe.
 
 ---
 
@@ -44,7 +53,7 @@ Das System verwendet 8 spezialisierte Agenten, organisiert als Agno-Team mit dem
 
 | Eigenschaft | Spezifikation |
 |-------------|---------------|
-| LLM / Budget | Claude Opus 4.6 / ~15.000 Token |
+| LLM / Budget | Claude Sonnet 4.6 (`claude-sonnet-4-6`) / ~15.000 Token |
 | Input | Makro-Indikatoren aus `macro_indicators` Tabelle |
 | Output | `{market_regime, sector_ratings[], regional_outlook[], risk_factors[], confidence, sources[]}` |
 
@@ -57,7 +66,7 @@ Das System verwendet 8 spezialisierte Agenten, organisiert als Agno-Team mit dem
 
 | Eigenschaft | Spezifikation |
 |-------------|---------------|
-| LLM / Budget | Claude Opus 4.6 / ~30.000 Token |
+| LLM / Budget | Claude Sonnet 4.6 (`claude-sonnet-4-6`) / ~30.000 Token |
 | Input | `stock_fundamentals` (3-5 Jahre) + Peer-Daten aus Supabase |
 | Output | `{business_model, financials{}, valuation{dcf, multiples{}}, quality{f_score, z_score}, moat_rating, score, sources[]}` |
 | Verification | Alle numerischen Outputs werden durch Verification Layer gegen SEC EDGAR geprüft |
@@ -70,7 +79,7 @@ Das System verwendet 8 spezialisierte Agenten, organisiert als Agno-Team mit dem
 
 | Eigenschaft | Spezifikation |
 |-------------|---------------|
-| LLM / Budget | Claude Sonnet 4.5 / ~10.000 Token |
+| LLM / Budget | Claude Sonnet 4.6 (`claude-sonnet-4-6`) / ~10.000 Token |
 | Input | `stock_prices` (1J Daily, 5J Weekly) + berechnete Indikatoren |
 | Output | `{trend, levels{support[], resistance[]}, indicators{rsi, macd, bollinger}, atr_stop, signal_strength}` |
 
@@ -80,7 +89,7 @@ Das System verwendet 8 spezialisierte Agenten, organisiert als Agno-Team mit dem
 
 | Eigenschaft | Spezifikation |
 |-------------|---------------|
-| LLM / Budget | Claude Sonnet 4.5 / ~8.000 Token |
+| LLM / Budget | Claude Sonnet 4.6 (`claude-sonnet-4-6`) / ~8.000 Token |
 | Input | `news_feed` (30 Tage) + Insider-Trades + Analyst-Ratings |
 | Output | `{sentiment (-100 bis +100), news_score, insider_activity{}, analyst_consensus, catalysts[]}` |
 
@@ -93,7 +102,7 @@ Das System verwendet 8 spezialisierte Agenten, organisiert als Agno-Team mit dem
 
 | Eigenschaft | Spezifikation |
 |-------------|---------------|
-| LLM / Budget | Claude Opus 4.6 / ~12.000 Token |
+| LLM / Budget | Claude Sonnet 4.6 (`claude-sonnet-4-6`) / ~12.000 Token |
 | Input | Outputs Agent 3+4+5 (nach Verification) + IPS + `portfolio_holdings` |
 | Output | `{ips_ok, position_eur, position_pct, risks[], portfolio_impact{}, stop_loss, exit_criteria[], risk_score, go_no_go}` |
 
@@ -106,7 +115,7 @@ Das System verwendet 8 spezialisierte Agenten, organisiert als Agno-Team mit dem
 
 | Eigenschaft | Spezifikation |
 |-------------|---------------|
-| LLM / Budget | Claude Opus 4.6 / ~15.000 Token |
+| LLM / Budget | Claude Opus 4.6 (`claude-opus-4-6`) / ~15.000 Token |
 | Input | These (Agent 3) + Risiken (Agent 6) |
 | Output | `{bear_args[], parallels[], hidden_risks[], worst_case{scenario, probability, downside_pct}, thesis_survival (0-100)}` |
 
@@ -119,7 +128,7 @@ Das System verwendet 8 spezialisierte Agenten, organisiert als Agno-Team mit dem
 
 | Eigenschaft | Spezifikation |
 |-------------|---------------|
-| LLM / Budget | Claude Opus 4.6 / ~10.000 Token |
+| LLM / Budget | Claude Opus 4.6 (`claude-opus-4-6`) / ~10.000 Token |
 | Agno-Rolle | Team Leader (coordinate mode) |
 | Input | Komprimierte Outputs aller Agenten (~10K Token) |
 | Output | `{recommendation, confidence, note{thesis[], risks[], data[], position, monitoring, exit}, trade_proposal}` |
@@ -163,6 +172,73 @@ Policy Engine Full-Check (deterministisch)
     ▼
 Frontend (Approve/Reject bei Stufe 2)
 ```
+
+---
+
+## Agent 9: Claim Extractor (Haiku)
+
+| Eigenschaft | Spezifikation |
+|-------------|---------------|
+| LLM / Budget | Claude Haiku 4.5 (`claude-haiku-4-5`) / ~5.000 Token |
+| Tier | Light — strukturierte Extraktion, kein Deep Reasoning |
+| Input | Agent-Outputs (JSON) + Claim-Schema (@docs/04_verification/claim-schema.json) |
+| Output | `claims[]` gemäß Schema: `{claim_id, claim_text, claim_type, value, unit, ticker, period, source_primary, tier, trade_critical}` |
+| Fallback | Schema-Validierung → FAIL → 1x Retry Haiku → FAIL → Sonnet 4.6 Fallback |
+
+> **Warum Haiku:** Claim-Extraktion ist schema-gebunden (kurzer Input, strukturierter JSON-Output). Braucht keine Interpretation, nur präzises Pattern Matching. Haiku ist dafür 3-5x schneller und 60-70% günstiger als Sonnet.
+
+---
+
+## Agent 10: Verification Agent (Haiku)
+
+| Eigenschaft | Spezifikation |
+|-------------|---------------|
+| LLM / Budget | Claude Haiku 4.5 (`claude-haiku-4-5`) / ~3.000 Token |
+| Tier | Light — Zahlenvergleich, keine Interpretation |
+| Input | `claims[]` + Daten von 2. Quelle (Alpha Vantage / SEC EDGAR) |
+| Output | `verification_results[]`: `{claim_id, source_verification, status, confidence_adjustment}` |
+| Status-Logik | Abweichung ≤2% → `verified`, ≤5% → `consistent`, >5% → `disputed`, keine 2. Quelle → `unverified` |
+| Fallback | Schema-Validierung → FAIL → 1x Retry Haiku → FAIL → Sonnet 4.6 Fallback |
+
+> **Warum Haiku:** "Ist P/E 24.5 ≈ 24.3?" ist Zahlenvergleich, kein Reasoning. Für die Interpretation *warum* Zahlen abweichen → Sonnet/Opus (das macht der Risk Manager).
+
+---
+
+## Model-Routing und Fallback-Logik
+
+### Bidirektionale Fallback-Kette
+
+```
+QUALITY FALLBACK (nach oben bei Fehler):
+┌──────────┐     Schema-Fail      ┌──────────┐     Schema-Fail      ┌──────────┐
+│  Haiku   │ ──── 1x Retry ────► │  Sonnet  │ ──── 1x Retry ────► │  Opus    │
+│  (Light) │                      │(Standard)│                      │ (Heavy)  │
+└──────────┘                      └──────────┘                      └──────────┘
+
+BUDGET FALLBACK (nach unten bei Kosten):
+┌──────────┐    Budget 80%        ┌──────────┐    Budget 95%        ┌──────────┐
+│  Opus    │ ──── degradiert ───► │  Sonnet  │ ──── degradiert ───► │  Haiku   │
+│ (Heavy)  │                      │(Standard)│                      │  (Light) │
+└──────────┘                      └──────────┘                      └──────────┘
+```
+
+### Routing-Regeln
+
+1. **Default-Routing:** Jeder Agent hat ein festes Default-Modell (siehe Tabelle oben)
+2. **Quality-Fallback:** Bei Schema-Validierungsfehler oder JSON-Parse-Error → 1x Retry mit gleichem Modell → dann nächsthöheres Modell
+3. **Budget-Fallback:** Wenn Monatsbudget für ein Tier erreicht → automatisch nächstniedrigeres Tier. Der User wird im Dashboard informiert
+4. **Effort-Parameter:** Sonnet und Opus unterstützen `effort: low/medium/high`. Default: `medium` für Analyse-Agents, `high` für Devil's Advocate und Synthesizer
+5. **Kein LLM bei deterministischen Tasks:** Policy Engine (Pre/Full-Check), Monitoring-Cron (Drawdown-Check, Trade-Count, Limit-Prüfungen) bleiben pure Code-Logik
+
+### Prompt Caching Strategie
+
+Folgende Prompt-Teile sind bei jeder Analyse identisch und werden gecacht:
+- System-Prompts aller Agents (~8K Token gesamt)
+- IPS/Policy-Regeln aus `user_policy` (~2K Token, invalidiert bei Policy-Änderung)
+- Output-Schemas (Claim-Schema, Agent-Output-Formate) (~3K Token)
+- Tool-Definitionen (~2K Token)
+
+**Geschätztes Caching-Potenzial:** ~15K Token pro Analyse werden aus Cache gelesen statt neu gesendet. Bei Opus: $5/MTok → $0.50/MTok = 90% Ersparnis auf diesen Anteil.
 
 ---
 

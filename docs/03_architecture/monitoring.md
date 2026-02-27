@@ -44,16 +44,60 @@ Jeder Agent-Call wird in `agent_cost_log` geloggt:
 
 ---
 
-## Budget-Caps und Fallback
+## Budget-Caps und Fallback (3-Tier)
 
-| Posten | Typical | Budget-Cap |
-|--------|---------|-----------|
-| Anthropic Opus | $50/Monat (15 Analysen) | $100/Monat |
-| Anthropic Sonnet | $10/Monat | $20/Monat |
-| Hosting (Vercel + Railway) | $15/Monat | $50/Monat |
-| **GESAMT** | **~$75/Monat** | **$170/Monat Hard Cap** |
+### Monatliche Budget-Limits pro Tier
 
-Wenn das Monatsbudget für Opus erreicht ist, schaltet das System auf Sonnet um (geringere Qualität, aber Kostenschutz). Das Monitoring-Dashboard zeigt Kosten-Verbrauch in Echtzeit.
+| Tier | Modell | Typisch | Soft Cap (80%) | Hard Cap (100%) | Bei Hard Cap |
+|------|--------|---------|---------------|----------------|-------------|
+| Heavy | Opus 4.6 | ~$15/Mo | $24 → Warning | $30 → Degradiert | → Sonnet |
+| Standard | Sonnet 4.6 | ~$10/Mo | $16 → Warning | $20 → Degradiert | → Haiku |
+| Light | Haiku 4.5 | ~$3/Mo | $4 → Warning | $5 → System-Pause | User informieren |
+| **Gesamt API** | | **~$28/Mo** | **$44** | **$55 Hard Cap** | Kill-Switch prüfen |
+
+### Degradierungs-Logik
+
+```
+Opus Budget 80% erreicht:
+  → Dashboard Warning: "Opus-Budget bei 80%, X Analysen verbleibend"
+  → Kein automatischer Eingriff
+
+Opus Budget 100% erreicht:
+  → Devil's Advocate + Synthesizer degradieren zu Sonnet
+  → Qualitätshinweis im Dashboard: "⚠️ Analyse läuft mit reduzierter Tiefe"
+
+Sonnet Budget 100% erreicht:
+  → Analyse-Agents degradieren zu Haiku
+  → Warnung: "⚠️ Nur Light-Analyse verfügbar"
+
+Gesamt-API Hard Cap erreicht:
+  → Keine weiteren LLM-Calls bis Monatsende
+  → Portfolio-Monitoring läuft weiter (deterministisch, kein LLM)
+  → User erhält E-Mail
+```
+
+### Kosten-Schätzung (Phase 2: 20 Analysen/Monat, alle Agents)
+
+| Posten | Geschätzt | Anmerkung |
+|--------|----------|-----------|
+| Opus API (Devil's Advocate + Synthesizer) | $8-12 | 2 Calls × 20 Analysen |
+| Sonnet API (5 Analyse-Agents) | $8-14 | 5 Calls × 20 Analysen |
+| Haiku API (Extraction + Verification) | $1-3 | 2 Calls × 20 Analysen |
+| Prompt Caching Ersparnis | -$3 bis -$5 | ~15K cached Tokens/Analyse |
+| **Netto API-Kosten** | **$14-24/Monat** | |
+| Hosting (Vercel + Supabase Free) | $0 | Free Tier reicht |
+| Datenprovider (Finnhub + AV) | $0 | Free Tier reicht |
+| **GESAMT Betrieb** | **~$14-24/Monat** | |
+
+> **Wichtig:** Diese Zahlen sind Schätzungen. Nach 1 Woche Betrieb liefert `agent_cost_log` echte Telemetrie. Dann werden Budget-Caps angepasst.
+
+### Telemetrie-basierte Optimierung
+
+Nach 1 Woche Betrieb prüfen:
+1. **Welche Agents verbrauchen am meisten?** → Token-Budget anpassen oder Effort-Parameter senken
+2. **Wie oft triggered der Quality-Fallback?** → Wenn Haiku >10% Schema-Fails hat → Haiku-Prompt optimieren oder auf Sonnet wechseln
+3. **Cache Hit Rate?** → Unter 60% → System-Prompts konsolidieren
+4. **Opus vs Sonnet Qualitätsunterschied?** → Wenn kaum messbar → Opus-Agents zu Sonnet degradieren (permanente Kostensenkung)
 
 ---
 

@@ -1,4 +1,4 @@
-# MyTrade — Initial Master Prompt für Claude Code (v3, final)
+# MyTrade — Initial Master Prompt für Claude Code (v4)
 
 Kopiere alles unterhalb dieser Linie in Claude Code:
 
@@ -101,17 +101,34 @@ User klickt "Analyze AAPL"
 - **UI darf Claims anzeigen, die unverified/manual_check sind**, aber immer mit klarer Ampel-Markierung und ohne sie als harte Grundlage für eine Execution zu verwenden.
 
 ## Wie du vorgehen sollst
-1. Lies ZUERST die 6 Pflichtdokumente oben.
-2. Nutze einen Subagent um Agno's aktuelle API-Patterns zu recherchieren (`use context7`).
-3. Erstelle das Backend-Scaffold (FastAPI + Supabase Connection).
-4. Erstelle die DB-Tabellen inkl. `user_policy` + `policy_change_log` (siehe settings-spec.md).
-5. Implementiere den ersten Agno Agent (Fundamental Analyst, minimal).
-6. Implementiere `get_effective_policy()` die aus DB liest (Fallback: YAML).
-7. Implementiere **Pre-Policy** (Universe/Verbote) und **Full-Policy** (Sizing/Exposure).
-8. Baue den Verification Layer, der `claim-schema.json` strikt erfüllt (Schema Validation in Tests).
-9. Verbinde Alpaca Paper API (Paper only).
-10. Baue das Frontend: Analyse-Seite (Button + Ergebnis mit Claim-Ampel) + Settings-Seite (3 Ebenen: Einsteiger/Presets/Advanced mit Microcopy).
-11. Teste End-to-End.
+
+### Phase 1: Foundation (Steps 1-5)
+1. **Docs lesen:** Lies ZUERST die 6 Pflichtdokumente oben. Verstehe den vollständigen Flow.
+2. **Agno recherchieren:** Nutze einen Subagent um Agno's aktuelle API-Patterns zu recherchieren (`use context7`). Prüfe: Agent-Erstellung, coordinate-Mode, Tool-Integration, PostgreSQL-Storage.
+3. **Supabase + Auth + DB:** Erstelle das Supabase-Projekt (EU Region). Konfiguriere Supabase Auth (Email/Password für MVP). Erstelle alle DB-Tabellen inkl. `user_policy` + `policy_change_log` (siehe settings-spec.md) + RLS Policies. Auth MUSS vor den Tabellen stehen, weil RLS `auth.uid()` braucht.
+4. **Backend-Scaffold:** Erstelle das FastAPI Backend mit Supabase Connection, CORS-Konfiguration (nur Vercel-Domain + localhost), Auth Middleware (JWT-Validierung), und API Rate Limiting (100 req/min/user). Siehe: docs/09_broker/security.md.
+5. **Data Collector:** Implementiere den Data Collector (deterministisch, kein LLM): Finnhub API-Integration mit Rate Limiting (max. 55 calls/min), Exponential Backoff (2s→4s→8s, 3 Retries), Queue-System. Daten schreiben in `stock_fundamentals`, `stock_prices`, `macro_indicators`. Siehe: docs/06_data/providers.md.
+
+### Phase 2: Agents + Verification (Steps 6-8)
+6. **Fundamental Analyst Agent:** Implementiere den ersten Agno Agent (Fundamental Analyst, Sonnet 4.6). System-Prompt aus docs/03_architecture/agents.md. Input: `stock_fundamentals`. Output: strukturiertes JSON mit `{value, source, timestamp}` für jede Zahl.
+7. **Claim Extractor + Schema Validation:** Implementiere den Claim Extractor (Haiku 4.5) als separaten Agent. Extrahiert numerische Claims aus Agent-Output gemäß `claim-schema.json`. Automatischer Schema-Test (JSON Schema Validation). Fallback: Schema-Fail → 1x Retry Haiku → Sonnet Fallback.
+8. **Verification Layer:** Baue den Verification Layer: Cross-Check Claims gegen 2. Quelle (Alpha Vantage / SEC EDGAR). Status-Logik: ≤2% → `verified`, ≤5% → `consistent`, >5% → `disputed`, keine 2. Quelle → `unverified`. Ergebnisse in `verification_results` Tabelle. Siehe: docs/04_verification/tier-system.md.
+
+### Phase 3: Policy + Execution (Steps 9-11)
+9. **Policy Engine:** Implementiere `get_effective_policy()` die aus DB liest (Fallback: `ips-template.yaml`). Implementiere **Pre-Policy** (Universe/Verbote — blockt VOR Agent-Call) und **Full-Policy** (Sizing/Exposure — prüft NACH Verification auf verifizierten Zahlen). Deterministisches Python, KEIN LLM. Siehe: docs/05_risk/policy-engine.md.
+10. **Alpaca Paper API:** Verbinde Alpaca Paper API (Paper only). Implementiere den Broker-Adapter (abstraktes Interface für später IBKR). Prüfe `ALPACA_PAPER_MODE=true` vor jedem Call. Trade-Vorschläge in `trade_log` loggen. Siehe: docs/09_broker/broker-router.md.
+11. **Error Handling:** Implementiere Circuit Breaker Pattern (5 Failures → 60s Pause), JSON Repair (json_repair Library), Partial Results (System läuft weiter wenn 1 Agent fehlschlägt, Confidence reduziert). Fehler in `error_log` loggen. Siehe: docs/03_architecture/error-handling.md.
+
+### Phase 4: Frontend + Mobile (Steps 12-13)
+12. **Frontend:** Baue das Frontend mit Next.js + Tailwind + shadcn/ui. Nutze `/frontend-design` Skill für Premium-Aesthetic. **Responsive/Mobile-First Layout** (funktioniert auf 375px Viewport). Zwei Seiten:
+    - **Analyse-Seite:** "Analyze [Ticker]" Button → Ergebnis mit Investment Note + Claim-Ampel (grün/gelb/rot) + Trade-Plan
+    - **Settings-Seite:** 3 Ebenen (Einsteiger/Presets/Advanced mit Microcopy-Tooltips)
+    - Touch-optimierte Approve/Reject Buttons für Mobile
+13. **PWA Setup:** Konfiguriere Progressive Web App: `manifest.json` (App-Name, Icons, Theme-Color), Service Worker (Offline-Cache für Dashboard), Meta-Tags für iOS/Android Homescreen-Installation. Push-Notification Infrastruktur vorbereiten (nicht implementieren im MVP, aber Setup ready). Siehe: Architektur-Spec v2.1, Sektion 5.3.
+
+### Phase 5: Monitoring + E2E (Steps 14-15)
+14. **Monitoring:** Implementiere `agent_cost_log` Tracking (Tokens, Kosten, Latenz pro Agent-Call). Budget-Caps aus docs/03_architecture/monitoring.md (Opus $30/Monat, Sonnet $20/Monat, Haiku $5/Monat). Budget-Fallback: Opus→Sonnet bei 100% Cap. Einfache Monitoring-Anzeige im Dashboard (Kosten MTD, Verification-Score, Agent-Health).
+15. **E2E Test + Security:** Teste den vollständigen Flow: "Analyze AAPL" → Claims → Verification → Policy → Paper Trade → Supabase Log. Führe `/security-check` Skill aus. Prüfe: keine API Keys im Frontend, RLS aktiv, CORS korrekt.
 
 ## Definition of Done (DoD)
 - [ ] End-to-End Run funktioniert (AAPL Analyse → Paper Order → Supabase Log)
@@ -120,6 +137,8 @@ User klickt "Analyze AAPL"
 - [ ] Agent-Output matcht `claim-schema.json` (automatischer Schema-Test)
 - [ ] Audit Trail vollständig in Supabase (analysis_run, claims, verification, trade_log)
 - [ ] Security Hook findet keine API Keys im Frontend
+- [ ] PWA installierbar auf Mobile (manifest.json + Service Worker registriert)
+- [ ] Responsive Layout funktioniert auf Mobile (375px Viewport getestet)
 
 ## Kritische Regeln
 - NIEMALS echte Broker-Orders erstellen (Stufe 1 = Paper only)
@@ -130,4 +149,4 @@ User klickt "Analyze AAPL"
 - KESt 27.5%: im MVP nur als optionales/estimiertes Overlay kennzeichnen (keine steuerliche Voll-Engine im Vertical Slice)
 
 ## Start
-Beginne damit, die 6 Pflichtdokumente zu lesen, und erstelle dann einen kurzen Implementierungsplan (max 15 Bulletpoints) bevor du Code schreibst. Frage mich, wenn etwas unklar ist.
+Beginne mit Phase 1, Step 1. Arbeite die 5 Phasen (15 Steps) sequenziell ab. Jeder Step sollte lauffähig sein bevor du zum nächsten gehst. Frage mich, wenn etwas unklar ist.

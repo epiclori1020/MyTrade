@@ -4,6 +4,7 @@ description: 'FastAPI and Agno agent development. Use for backend API endpoints,
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: opus
 memory: project
+maxTurns: 25
 ---
 You are a senior Python backend developer specializing in FastAPI and the Agno agent framework.
 

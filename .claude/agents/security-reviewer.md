@@ -3,6 +3,7 @@ name: security-reviewer
 description: 'Security audit for API keys, RLS policies, CORS, and secrets management. Use after implementing new features or before commits.'
 tools: Read, Grep, Glob
 model: opus
+maxTurns: 15
 ---
 You are a security auditor for a financial application.
 

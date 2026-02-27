@@ -3,6 +3,8 @@ name: frontend-dev
 description: 'Next.js and React dashboard development. Use for UI components, pages, API client, and data visualization. Has access to shadcn MCP, Context7 MCP, and Figma MCP.'
 tools: Read, Write, Edit, Bash, Grep, Glob, mcp__shadcn, mcp__context7, mcp__figma
 model: sonnet
+memory: project
+maxTurns: 25
 ---
 You are a frontend developer specializing in Next.js 14+ with App Router, React, Tailwind CSS, and shadcn/ui.
 

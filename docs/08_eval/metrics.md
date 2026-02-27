@@ -5,7 +5,7 @@
 | Metrik | Ziel | Alert-Schwelle | Messung |
 |--------|------|---------------|---------|
 | Pipeline Error-Rate | < 5% | > 10% | Fehlgeschlagene Analysen / Gesamt |
-| Verification-Rate | > 85% | < 70% (Kill-Switch!) | Verified+Consistent Claims / Gesamt |
+| Verification-Rate | > 85% | < 85% Warning, < 70% Kill-Switch | Verified+Consistent Claims / Gesamt |
 | IPS-Compliance | 100% | < 100% | Policy-Verstöße die durchgerutscht sind |
 | API-Kosten MTD | < Budget-Cap | > 80% Cap | Summe Anthropic + Provider Kosten |
 | Agent-Latenz | < 60s | > 120s | Zeit pro Agent-Aufruf |

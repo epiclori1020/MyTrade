@@ -3,6 +3,7 @@ name: test-writer
 description: 'Write tests for backend services, Policy Engine, Verification Layer, and API endpoints. Use when new features are implemented.'
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
+maxTurns: 20
 ---
 You are a test engineer for a financial application.
 

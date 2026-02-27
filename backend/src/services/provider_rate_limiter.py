@@ -57,5 +57,9 @@ class ProviderRateLimiter:
 # Finnhub free tier: 60 calls/min, we use 55 for safety margin
 finnhub_limiter = ProviderRateLimiter(max_calls=55, window_seconds=60.0, max_wait_seconds=30.0)
 
-# Alpha Vantage free tier: 25 calls/day — short timeout since we don't want to block threads
+# Alpha Vantage free tier: 25 calls/day — short timeout since we don't want to block threads.
+# NOTE: This is a sliding 86400s window from first call, NOT a calendar day reset.
+# After server restart the window resets (in-memory). For MVP this is acceptable
+# since AV is only a fallback provider. A persistent counter would be needed
+# if AV becomes a primary provider.
 alpha_vantage_limiter = ProviderRateLimiter(max_calls=25, window_seconds=86400.0, max_wait_seconds=5.0)

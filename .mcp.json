@@ -1,8 +1,9 @@
 {
   "mcpServers": {
     "shadcn": {
-      "type": "http",
-      "url": "https://www.shadcn.io/api/mcp"
+      "type": "stdio",
+      "command": "npx",
+      "args": ["shadcn@latest", "mcp"]
     },
     "context7": {
       "command": "npx",

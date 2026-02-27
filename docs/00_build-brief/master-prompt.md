@@ -102,6 +102,8 @@ User klickt "Analyze AAPL"
 
 ## Wie du vorgehen sollst
 
+> **Detaillierte Roadmap:** Siehe @docs/03_architecture/sprint-roadmap.md für granulare Sub-Tasks, Checkbox-Listen und DoD pro Phase. Die folgenden Steps sind eine Zusammenfassung.
+
 ### Phase 1: Foundation (Steps 1-5)
 1. **Docs lesen:** Lies ZUERST die 6 Pflichtdokumente oben. Verstehe den vollständigen Flow.
 2. **Agno recherchieren:** Nutze einen Subagent um Agno's aktuelle API-Patterns zu recherchieren (`use context7`). Prüfe: Agent-Erstellung, coordinate-Mode, Tool-Integration, PostgreSQL-Storage.

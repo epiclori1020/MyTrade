@@ -11,6 +11,7 @@
 agno
 agno[anthropic]
 agno[postgres]
+agno[sql]
 ```
 
 Relevante Imports:
@@ -72,7 +73,7 @@ Claude(id="claude-opus-4-6", max_tokens=8192, cache_system_prompt=True)
 Claude(id="claude-sonnet-4-6", max_tokens=4096, cache_system_prompt=True)
 
 # Light (Haiku) — Extraktion, Verification
-Claude(id="claude-haiku-4-5", max_tokens=2048, cache_system_prompt=True)
+Claude(id="claude-haiku-4-5", max_tokens=4096, cache_system_prompt=True)
 ```
 
 > **TODO Step 3:** Model-IDs per Smoke-Test verifizieren. Die Agno-Docs zeigen teilweise
@@ -212,16 +213,21 @@ db = PostgresDb(db_url="postgresql+psycopg://user:pw@host:5432/postgres")
 agent = Agent(
     model=Claude(id="claude-sonnet-4-6"),
     db=db,
-    add_history_to_context=True,
-    num_history_runs=5,
+    # WICHTIG: add_history_to_context=False (Default) für Analyse-Agents.
+    # MyTrade-Analysen sind stateless — jede Analyse ist unabhängig.
+    # History im Kontext würde Ergebnisse verfälschen.
 )
 
-# Multi-User Isolation über user_id + session_id
-response = agent.run("Analyze AAPL", user_id="user-uuid", session_id="analysis-123")
+# user_id für Audit-Trail, session_id pro Analyse-Run
+response = agent.run("Analyze AAPL", user_id="user-uuid", session_id="analysis-run-uuid")
 ```
 
 > **Supabase:** Direct Connection (Port 5432) verwenden, nicht Pooler (Port 6543).
 > Agno verwaltet eigene Sessions und braucht persistent connections.
+>
+> **Stateless Analyse:** `add_history_to_context` und `num_history_runs` sind für
+> konversationelle Agents gedacht. MyTrade-Analyse-Agents sollen KEINE vorherigen
+> Analysen als Kontext erhalten — jeder Run ist unabhängig.
 
 ---
 

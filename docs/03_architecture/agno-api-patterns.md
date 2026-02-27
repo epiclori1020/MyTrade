@@ -86,14 +86,19 @@ Claude(id="claude-haiku-4-5", max_tokens=2048, cache_system_prompt=True)
 Agno akzeptiert einfache Python-Funktionen als Tools:
 
 ```python
+import os
 import httpx
 import json
 
 def get_stock_fundamentals(ticker: str) -> str:
     """Fetch fundamental data from Finnhub for a given ticker."""
     response = httpx.get(
-        f"https://finnhub.io/api/v1/stock/metric",
-        params={"symbol": ticker, "metric": "all", "token": FINNHUB_API_KEY},
+        "https://finnhub.io/api/v1/stock/metric",
+        params={
+            "symbol": ticker,
+            "metric": "all",
+            "token": os.environ["FINNHUB_API_KEY"],
+        },
     )
     return json.dumps(response.json())
 
@@ -118,10 +123,11 @@ agent = Agent(tools=[SQLTools(db_url="postgresql+psycopg://...")])
 from pydantic import BaseModel, Field
 
 class FundamentalAnalysis(BaseModel):
+    """Vereinfacht — wird in Step 5 mit voll typisierten Nested Models definiert."""
     business_model: str
-    financials: dict
-    valuation: dict
-    quality: dict
+    financials: dict       # Step 5: eigenes Pydantic Model
+    valuation: dict        # Step 5: eigenes Pydantic Model
+    quality: dict          # Step 5: eigenes Pydantic Model
     moat_rating: str
     score: int = Field(ge=0, le=100)
     sources: list[dict]

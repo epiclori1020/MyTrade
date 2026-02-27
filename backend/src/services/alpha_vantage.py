@@ -130,7 +130,7 @@ def _safe_float(value: object) -> float | None:
         return None
     if isinstance(value, str):
         value = value.strip()
-        if value in ("", "-", "None", "0"):
+        if value in ("", "-", "None"):
             return None
     try:
         result = float(value)

@@ -93,8 +93,8 @@ class TestAlphaVantageSafeFloat:
         assert _safe_float("None") is None
 
     def test_zero_string(self):
-        assert _safe_float("0") is None
+        """String "0" is a valid numeric value, not missing data."""
+        assert _safe_float("0") == 0.0
 
     def test_real_zero_int(self):
-        """Int 0 should return 0.0 (not None — that's only for string "0")."""
         assert _safe_float(0) == 0.0

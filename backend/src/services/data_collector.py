@@ -69,6 +69,9 @@ def collect_ticker_data(ticker: str) -> CollectionResult:
         )
 
     result = CollectionResult(ticker=ticker, status="success")
+    fundamentals = None
+    candles: list[dict] = []
+    quote = None
     finnhub = FinnhubClient()
 
     try:

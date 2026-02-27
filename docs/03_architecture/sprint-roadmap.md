@@ -26,9 +26,9 @@
 **Quelle:** @docs/03_architecture/database-schema.md, @docs/02_policy/settings-spec.md, @docs/09_broker/security.md
 
 **Auth Setup:**
-- [ ] Supabase-Projekt erstellen (EU Frankfurt Region)
-- [ ] Supabase Auth konfigurieren: Email/Password für MVP
-- [ ] Auth MUSS vor den Tabellen stehen (RLS braucht `auth.uid()`)
+- [x] Supabase-Projekt erstellen (EU Frankfurt Region)
+- [x] Supabase Auth konfigurieren: Email/Password für MVP
+- [x] Auth MUSS vor den Tabellen stehen (RLS braucht `auth.uid()`)
 
 **DB-Migrationen — alle 12 MVP-Tabellen:**
 
@@ -50,13 +50,13 @@
 > **Nicht im MVP:** `investment_policy` (Legacy, ersetzt durch `user_policy`), `learning_progress` (Lern-Modus = Phase 2+)
 
 **RLS Policies:**
-- [ ] RLS aktivieren auf allen User-bezogenen Tabellen
-- [ ] `auth.uid() = user_id` Policies für SELECT/UPDATE
-- [ ] `trade_log`: User kann nur eigene Trades sehen + status von `proposed` auf `approved`/`rejected` ändern
-- [ ] Entscheidung: Option A (User-JWT weiterleiten) oder Option B (service_role + explizite Validierung) — siehe database-schema.md
+- [x] RLS aktivieren auf allen User-bezogenen Tabellen
+- [x] `auth.uid() = user_id` Policies für SELECT/UPDATE
+- [x] `trade_log`: User kann nur eigene Trades sehen + status von `proposed` auf `approved`/`rejected` ändern
+- [x] Entscheidung: Hybrid — Option A (auth.uid()) für 5 User-Tabellen + Option B (service_role) für 4 Backend-Tabellen + Shared-Data RLS (authenticated SELECT) für 3 Datentabellen
 
 **Indexes:**
-- [ ] Alle Indexes aus database-schema.md erstellen
+- [x] Alle Indexes aus database-schema.md erstellen
 
 ### Step 3: Backend-Scaffold
 

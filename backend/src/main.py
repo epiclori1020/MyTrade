@@ -10,7 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.config import get_settings
 from src.dependencies.rate_limit import limiter, rate_limit_exceeded_handler
-from src.routes import health
+from src.routes import data, health
 
 logger = logging.getLogger(__name__)
 
@@ -95,3 +95,4 @@ async def generic_exception_handler(_request: Request, _exc: Exception) -> JSONR
 
 # --- Routes ---
 app.include_router(health.router)
+app.include_router(data.router)

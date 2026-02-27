@@ -77,19 +77,23 @@
 
 Der Data Collector ist **deterministisch** (kein LLM) — reine API-Logik.
 
-- [ ] Finnhub API-Client implementieren
+- [x] Finnhub API-Client implementieren
   - `/stock/metric?symbol=X` → Fundamentals (Revenue, EPS, P/E)
+  - `/stock/profile2?symbol=X` → shareOutstanding (für absolute Werte)
   - `/quote?symbol=X` → Aktienkurs
+  - `/stock/candle?symbol=X` → Historische OHLCV (1 Jahr)
   - `/company-news?symbol=X` → News
   - `/stock/insider-transactions?symbol=X` → Insider-Trades
-- [ ] Rate Limiting: max. 55 calls/min (Queue-basiert, nicht blockierend)
-- [ ] Retry-Logik: Exponential Backoff (2s → 4s → 8s, max. 3 Retries)
-- [ ] Fallback-Quelle: Alpha Vantage Client als Backup wenn Finnhub down (siehe error-handling.md)
-- [ ] Fehler in `error_log` Tabelle schreiben
-- [ ] Daten schreiben in:
+- [x] Rate Limiting: max. 55 calls/min (Sliding Window, thread-safe)
+- [x] Retry-Logik: Exponential Backoff (2s → 4s → 8s, max. 3 Retries)
+- [x] Fallback-Quelle: Alpha Vantage Client als Backup wenn Finnhub down
+- [x] Fehler in `error_log` Tabelle schreiben (best-effort, on_error callback pro Retry)
+- [x] Daten schreiben in:
   - `stock_fundamentals` (Ticker, Periode, Revenue, EPS, P/E, etc.)
-  - `stock_prices` (OHLCV + technische Indikatoren)
-- [ ] MVP-Universe hardcoded: `AAPL, MSFT, JNJ, JPM, PG, VOO, VWO`
+  - `stock_prices` (OHLCV, batch upsert 100 rows)
+- [x] MVP-Universe hardcoded: `AAPL, MSFT, JNJ, JPM, PG, VOO, VWO`
+- [x] API-Endpoint: `POST /api/collect/{ticker}` (auth + rate-limited)
+- [x] 54 Tests (8 bestehend + 46 neu) alle grün
 
 ### Step 5: Fundamental Analyst Agent
 

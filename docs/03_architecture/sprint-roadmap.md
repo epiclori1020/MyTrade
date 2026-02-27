@@ -62,14 +62,14 @@
 
 **Quelle:** @docs/03_architecture/system-overview.md, @docs/09_broker/security.md
 
-- [ ] FastAPI Projekt-Struktur erstellen (`backend/src/`)
-- [ ] Supabase Connection einrichten (Supabase Python Client)
-- [ ] Health-Endpoint: `GET /health` mit DB-Connection-Test
-- [ ] CORS-Konfiguration: nur `localhost:3000` + Vercel-Domain (keine Wildcards)
-- [ ] Auth Middleware: JWT-Validierung auf allen geschützten Endpoints
-- [ ] API Rate Limiting: 100 requests/min/user (FastAPI Middleware)
-- [ ] Basis Error-Response Format (konsistent für alle Endpoints)
-- [ ] `.env` Werte laden: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- [x] FastAPI Projekt-Struktur erstellen (`backend/src/`)
+- [x] Supabase Connection einrichten (Supabase Python Client)
+- [x] Health-Endpoint: `GET /health` mit DB-Connection-Test
+- [x] CORS-Konfiguration: nur `localhost:3000` + Vercel-Domain (keine Wildcards)
+- [x] Auth Middleware: JWT-Validierung auf allen geschützten Endpoints
+- [x] API Rate Limiting: 100 requests/min/user (FastAPI Middleware)
+- [x] Basis Error-Response Format (konsistent für alle Endpoints)
+- [x] `.env` Werte laden: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 
 ### Step 4: Data Collector
 

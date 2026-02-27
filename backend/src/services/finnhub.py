@@ -269,9 +269,3 @@ def _safe_float(value: object) -> float | None:
         return result if result == result else None  # NaN check
     except (ValueError, TypeError):
         return None
-
-
-def _safe_int(value: object) -> int | None:
-    """Convert a value to int via float, returning None on failure."""
-    f = _safe_float(value)
-    return int(f) if f is not None else None

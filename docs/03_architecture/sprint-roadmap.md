@@ -110,7 +110,7 @@ Der Data Collector ist **deterministisch** (kein LLM) — reine API-Logik.
 - [x] Agent-Output in `analysis_runs.fundamental_out` speichern
 - [x] Token-Verbrauch + Kosten in `agent_cost_log` loggen
 - [x] API-Endpoint: `POST /api/analyze/{ticker}` (startet Analyse)
-- [x] 89 Tests (54 bestehend + 35 neu) alle grün
+- [x] 91 Tests (54 bestehend + 37 neu) alle grün
 
 #### Phase 1 — Definition of Done
 - [ ] Supabase Auth funktioniert (Login/Signup)

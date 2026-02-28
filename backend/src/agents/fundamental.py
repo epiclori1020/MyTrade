@@ -136,14 +136,16 @@ def _format_number(value, label: str) -> str:
     """Format a number for the prompt, or mark as unavailable."""
     if value is None:
         return f"{label}: NICHT VERFÜGBAR"
-    if isinstance(value, (int, float)):
-        if abs(value) >= 1_000_000_000:
-            return f"{label}: {value:,.0f} USD"
-        elif abs(value) >= 1:
-            return f"{label}: {value}"
-        else:
-            return f"{label}: {value}"
+    if isinstance(value, (int, float)) and abs(value) >= 1_000_000_000:
+        return f"{label}: {value:,.0f} USD"
     return f"{label}: {value}"
+
+
+def _format_ratio_pct(value, label: str) -> str:
+    """Format a ratio as value with percentage (e.g. ROE 1.45 → '1.45 (145%)')."""
+    if value is None:
+        return f"{label}: NICHT VERFÜGBAR"
+    return f"{label}: {value} ({value * 100:.0f}%)"
 
 
 def _build_user_prompt(
@@ -172,8 +174,8 @@ def _build_user_prompt(
         _format_number(fundamentals.get("pe_ratio"), "P/E Ratio (TTM)"),
         _format_number(fundamentals.get("pb_ratio"), "P/B Ratio"),
         _format_number(fundamentals.get("ev_ebitda"), "EV/EBITDA"),
-        _format_number(fundamentals.get("roe"), "ROE"),
-        _format_number(fundamentals.get("roic"), "ROIC"),
+        _format_ratio_pct(fundamentals.get("roe"), "ROE"),
+        _format_ratio_pct(fundamentals.get("roic"), "ROIC"),
         _format_number(fundamentals.get("f_score"), "F-Score"),
         _format_number(fundamentals.get("z_score"), "Z-Score"),
     ]

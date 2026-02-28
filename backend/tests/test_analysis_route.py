@@ -121,3 +121,14 @@ class TestAnalyzeEndpoint:
 
         assert resp.status_code == 200
         mock_run.assert_called_once_with("aapl", FAKE_USER["id"])
+
+    @patch("src.routes.analysis.run_fundamental_analysis")
+    def test_db_failure_returns_503(self, mock_run, auth_client):
+        mock_run.side_effect = Exception("connection refused")
+
+        resp = auth_client.post("/api/analyze/AAPL")
+
+        assert resp.status_code == 503
+        assert "temporarily unavailable" in resp.json()["detail"]
+        # Must NOT expose internal error details
+        assert "connection" not in resp.json()["detail"]

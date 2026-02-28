@@ -117,6 +117,7 @@ class TestBuildUserPrompt:
         assert "Quelle: finnhub" in prompt
         assert "Endpoint: /stock/metric" in prompt
         assert "EPS: 6.42" in prompt
+        assert "ROE: 1.45 (145%)" in prompt
 
     def test_marks_null_fields_as_unavailable(self):
         prompt = _build_user_prompt("AAPL", SAMPLE_FUNDAMENTALS, SAMPLE_PRICE)

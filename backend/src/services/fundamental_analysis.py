@@ -47,6 +47,23 @@ def _calculate_cost(input_tokens: int, output_tokens: int) -> float:
     )
 
 
+def _sanitize_error_for_db(error_message: str) -> str:
+    """Sanitize error message before writing to analysis_runs.error_log.
+
+    Users can read their own analysis_runs via Supabase RLS,
+    so error_log must not expose internal implementation details.
+    Raw errors remain in the error_log table (no user RLS) and server logs.
+    """
+    lower = error_message.lower()
+    if "timeout" in lower:
+        return "Analysis timed out"
+    if "api error" in lower:
+        return "Analysis service error"
+    if "parse" in lower:
+        return "Analysis produced invalid output"
+    return "Analysis failed"
+
+
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -180,7 +197,7 @@ def run_fundamental_analysis(ticker: str, user_id: str) -> AnalysisResult:
     if analysis_dict:
         update["fundamental_out"] = analysis_dict
     if error_message:
-        update["error_log"] = [{"error": error_message, "timestamp": _now_utc_iso()}]
+        update["error_log"] = [{"error": _sanitize_error_for_db(error_message), "timestamp": _now_utc_iso()}]
 
     try:
         admin.table("analysis_runs").update(update).eq("id", analysis_id).execute()

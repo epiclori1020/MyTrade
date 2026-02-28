@@ -368,3 +368,39 @@ class TestPhaseBOrchestration:
 
         assert result.status == "failed"
         assert "unexpected" in result.error_message.lower()
+
+    @patch("src.services.fundamental_analysis.log_error")
+    @patch("src.services.fundamental_analysis.call_fundamental_agent")
+    @patch("src.services.fundamental_analysis.get_settings")
+    @patch("src.services.fundamental_analysis.get_supabase_admin")
+    def test_error_log_in_db_is_sanitized(
+        self, mock_admin_fn, mock_settings, mock_agent, mock_log_error
+    ):
+        """error_log written to analysis_runs must be sanitized (user-readable via RLS)."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        mock_settings.return_value.anthropic_api_key = "test-key"
+
+        fund_table = admin.table("stock_fundamentals")
+        fund_table.select.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = SimpleNamespace(
+            data=[SAMPLE_FUND_ROW]
+        )
+
+        mock_agent.side_effect = AgentError(
+            agent_name="fundamental_analyst",
+            message="API error (500): Internal server error from anthropic SDK",
+            error_type="api_error",
+            usage={"input_tokens": 800, "output_tokens": 0},
+        )
+
+        run_fundamental_analysis("AAPL", FAKE_USER_ID)
+
+        # Verify the analysis_runs update contains sanitized error_log
+        runs_table = admin.table("analysis_runs")
+        update_dict = runs_table.update.call_args[0][0]
+        error_entry = update_dict["error_log"][0]["error"]
+
+        assert error_entry == "Analysis service error"
+        assert "500" not in error_entry
+        assert "anthropic" not in error_entry
+        assert "SDK" not in error_entry

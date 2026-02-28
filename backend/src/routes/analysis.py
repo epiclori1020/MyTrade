@@ -46,6 +46,12 @@ def analyze_ticker(ticker: str, request: Request) -> dict:
             status_code=503,
             detail="Analysis service temporarily unavailable",
         )
+    except Exception as exc:
+        logger.error("Unexpected error analyzing %s: %s", ticker, exc, exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Analysis service temporarily unavailable",
+        )
 
     return {
         "status": result.status,

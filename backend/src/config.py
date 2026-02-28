@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_role_key: str
 
-    # --- Optional: Supabase Direct DB (needed from Step 5 for Agno PostgreSQL Storage) ---
+    # --- Optional: Supabase Direct DB (needed from Step 8+ for Agno PostgreSQL Storage) ---
     supabase_db_url: str = ""
 
     # --- Optional: LLM ---

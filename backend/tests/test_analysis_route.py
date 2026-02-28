@@ -60,14 +60,16 @@ class TestAnalyzeEndpoint:
         from src.dependencies.auth import get_current_user
         from src.main import app
 
-        app.dependency_overrides.pop(get_current_user, None)
+        orig = app.dependency_overrides.pop(get_current_user, None)
+        try:
+            from fastapi.testclient import TestClient
+            unauth_client = TestClient(app, raise_server_exceptions=False)
+            resp = unauth_client.post("/api/analyze/AAPL")
 
-        # TestClient without auth header
-        from fastapi.testclient import TestClient
-        unauth_client = TestClient(app, raise_server_exceptions=False)
-        resp = unauth_client.post("/api/analyze/AAPL")
-
-        assert resp.status_code in (401, 403)
+            assert resp.status_code in (401, 403)
+        finally:
+            if orig is not None:
+                app.dependency_overrides[get_current_user] = orig
 
     @patch("src.routes.analysis.run_fundamental_analysis")
     def test_no_fundamentals_returns_400(self, mock_run, auth_client):

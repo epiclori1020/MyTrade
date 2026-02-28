@@ -113,12 +113,12 @@ Der Data Collector ist **deterministisch** (kein LLM) — reine API-Logik.
 - [x] 91 Tests (54 bestehend + 37 neu) alle grün
 
 #### Phase 1 — Definition of Done
-- [ ] Supabase Auth funktioniert (Login/Signup)
-- [ ] Alle 12 DB-Tabellen existieren mit RLS
-- [ ] `GET /health` gibt 200 + DB-Status zurück
-- [ ] Data Collector holt AAPL-Daten von Finnhub und schreibt in DB
-- [ ] Fundamental Analyst analysiert AAPL und liefert strukturiertes JSON
-- [ ] `analysis_runs` Eintrag mit `fundamental_out` existiert in Supabase
+- [x] Supabase Auth funktioniert (Login/Signup)
+- [x] Alle 12 DB-Tabellen existieren mit RLS
+- [x] `GET /health` gibt 200 + DB-Status zurück
+- [x] Data Collector holt AAPL-Daten von Finnhub und schreibt in DB
+- [x] Fundamental Analyst analysiert AAPL und liefert strukturiertes JSON
+- [x] `analysis_runs` Eintrag mit `fundamental_out` existiert in Supabase
 
 ---
 

@@ -99,15 +99,18 @@ Der Data Collector ist **deterministisch** (kein LLM) — reine API-Logik.
 
 **Quelle:** @docs/03_architecture/agents.md (Agent 3)
 
-- [ ] Agno Agent erstellen: Fundamental Analyst
+- [x] Fundamental Analyst Agent erstellen (Direct Anthropic SDK, `claude-sonnet-4-6`)
   - Modell: `claude-sonnet-4-6` (Standard-Tier, ~30K Token Budget)
   - System-Prompt aus agents.md (Geschäftsmodell, Finanzen, Bewertung, Qualität)
-- [ ] Input: `stock_fundamentals` aus Supabase (3-5 Jahre Daten)
-- [ ] Output: Strukturiertes JSON mit `{value, source, timestamp}` pro Zahl
-  - `{business_model, financials{}, valuation{dcf, multiples{}}, quality{f_score, z_score}, moat_rating, score, sources[]}`
-- [ ] Agent-Output in `analysis_runs.fundamental_out` speichern
-- [ ] Token-Verbrauch + Kosten in `agent_cost_log` loggen
-- [ ] API-Endpoint: `POST /api/analyze/{ticker}` (startet Analyse)
+  - Direct Anthropic SDK statt Agno (Agno coordinate mode deferred auf Step 8+)
+  - `messages.parse()` für native Pydantic Structured Output
+- [x] Input: `stock_fundamentals` aus Supabase (TTM-Daten)
+- [x] Output: Strukturiertes JSON mit `{value, unit, source, period, retrieved_at}` pro Zahl
+  - `{business_model, financials{}, valuation{}, quality{}, moat_rating, score, risks[], sources[]}`
+- [x] Agent-Output in `analysis_runs.fundamental_out` speichern
+- [x] Token-Verbrauch + Kosten in `agent_cost_log` loggen
+- [x] API-Endpoint: `POST /api/analyze/{ticker}` (startet Analyse)
+- [x] 91 Tests (54 bestehend + 37 neu) alle grün
 
 #### Phase 1 — Definition of Done
 - [ ] Supabase Auth funktioniert (Login/Signup)

@@ -1,7 +1,7 @@
-"""Custom exceptions for data provider errors.
+"""Custom exceptions for MyTrade backend.
 
-Shared by Finnhub and Alpha Vantage clients. The retry module
-catches DataProviderError subtypes; parse errors propagate immediately.
+Data provider errors (shared by Finnhub/Alpha Vantage), agent errors
+(LLM call failures), and pre-condition errors (missing data/config).
 """
 
 
@@ -34,3 +34,39 @@ class ProviderUnavailableError(DataProviderError):
 
     def __init__(self, provider: str, message: str, status_code: int = 503):
         super().__init__(provider, message, status_code=status_code)
+
+
+# --- Pre-condition errors (no tokens consumed, no analysis_run created) ---
+
+
+class PreconditionError(Exception):
+    """Pre-condition not met (e.g. no data in DB).
+
+    Raised BEFORE analysis_run creation — no tokens consumed.
+    """
+
+
+class ConfigurationError(Exception):
+    """Server misconfiguration (e.g. missing API key).
+
+    Raised BEFORE analysis_run creation — no tokens consumed.
+    """
+
+
+# --- Agent errors (tokens may have been consumed) ---
+
+
+class AgentError(Exception):
+    """Error during LLM agent execution. Tokens may have been consumed."""
+
+    def __init__(
+        self,
+        agent_name: str,
+        message: str,
+        error_type: str = "agent_error",
+        usage: dict | None = None,
+    ):
+        self.agent_name = agent_name
+        self.error_type = error_type
+        self.usage = usage  # {"input_tokens": N, "output_tokens": N}
+        super().__init__(f"[{agent_name}] {message}")

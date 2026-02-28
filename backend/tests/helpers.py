@@ -10,4 +10,5 @@ def make_test_settings() -> Settings:
         cors_origins="http://localhost:3000",
         finnhub_api_key="test-finnhub-key",
         alpha_vantage_api_key="test-av-key",
+        anthropic_api_key="test-anthropic-key",
     )

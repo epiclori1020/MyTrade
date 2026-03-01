@@ -232,6 +232,12 @@ class TestProcessSingleClaim:
         result = _process_single_claim(claim, SAMPLE_AV_DATA)
         assert result is None
 
+    def test_primary_value_near_zero_returns_none(self):
+        """Near-zero guard — math.isclose tolerance catches tiny floats."""
+        claim = {**SAMPLE_CLAIM_REVENUE, "value": 1e-12}
+        result = _process_single_claim(claim, SAMPLE_AV_DATA)
+        assert result is None
+
     def test_disputed_trade_critical_high_deviation(self):
         """Deviation >5% + trade_critical → disputed with -15."""
         av_data = {**SAMPLE_AV_DATA, "revenue": 420_000_000_000}  # ~6.5% deviation

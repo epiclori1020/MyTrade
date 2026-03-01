@@ -15,6 +15,7 @@ Best result is 'consistent' (two Tier B sources agree) or 'manual_check'
 """
 
 import logging
+import math
 from dataclasses import dataclass
 
 from src.config import get_settings
@@ -147,7 +148,7 @@ def _process_single_claim(
         return None
 
     primary_value = float(raw_value)
-    if primary_value == 0:
+    if math.isclose(primary_value, 0.0, abs_tol=1e-9):
         return None  # Division by zero guard
 
     av_value_float = float(av_value)

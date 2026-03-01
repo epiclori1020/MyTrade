@@ -257,6 +257,8 @@ class TestCallClaimExtractor:
         # Usage should be cumulative from all 3 attempts
         assert exc_info.value.usage["input_tokens"] == 2400  # 3 * 800
         assert exc_info.value.usage["cost_usd"] > 0
+        # Last model attempted was Sonnet (attempt 3)
+        assert exc_info.value.usage["model_used"] == MODEL_SONNET
 
     @patch("src.agents.claim_extractor._get_client")
     def test_api_timeout_raises_agent_error(self, mock_get_client):
@@ -272,6 +274,8 @@ class TestCallClaimExtractor:
             call_claim_extractor("AAPL", SAMPLE_FUNDAMENTAL_OUT)
 
         assert exc_info.value.error_type == "timeout"
+        # Timeout on first attempt — last_model is still Haiku
+        assert exc_info.value.usage["model_used"] == MODEL_HAIKU
 
     @patch("src.agents.claim_extractor._get_client")
     def test_api_error_raises_agent_error(self, mock_get_client):

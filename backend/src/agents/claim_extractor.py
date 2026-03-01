@@ -157,6 +157,7 @@ def call_claim_extractor(
 
     total_usage = {"input_tokens": 0, "output_tokens": 0}
     total_cost = 0.0
+    last_model = MODEL_HAIKU  # Tracks which model was last attempted (for error reporting)
 
     try:
         # --- Attempt 1: Haiku with original prompt ---
@@ -201,6 +202,7 @@ def call_claim_extractor(
         logger.warning("Haiku attempt 2 failed: %s — falling back to Sonnet", error_desc)
 
         # --- Attempt 3: Sonnet fallback with original prompt (clean input) ---
+        last_model = MODEL_SONNET
         claims, usage, error_desc = _attempt_extraction(client, MODEL_SONNET, user_prompt)
         total_usage["input_tokens"] += usage["input_tokens"]
         total_usage["output_tokens"] += usage["output_tokens"]
@@ -220,7 +222,7 @@ def call_claim_extractor(
             agent_name="claim_extractor",
             message=f"All extraction attempts failed. Last error: {error_desc}",
             error_type="extraction_failed",
-            usage={**total_usage, "cost_usd": total_cost},
+            usage={**total_usage, "cost_usd": total_cost, "model_used": last_model},
         )
 
     except AgentError:
@@ -231,7 +233,7 @@ def call_claim_extractor(
             agent_name="claim_extractor",
             message=f"API timeout: {exc}",
             error_type="timeout",
-            usage={**total_usage, "cost_usd": total_cost},
+            usage={**total_usage, "cost_usd": total_cost, "model_used": last_model},
         ) from exc
 
     except anthropic.APIError as exc:
@@ -239,7 +241,7 @@ def call_claim_extractor(
             agent_name="claim_extractor",
             message=f"API error ({exc.status_code}): {exc.message}",
             error_type="api_error",
-            usage={**total_usage, "cost_usd": total_cost},
+            usage={**total_usage, "cost_usd": total_cost, "model_used": last_model},
         ) from exc
 
     except Exception as exc:
@@ -247,5 +249,5 @@ def call_claim_extractor(
             agent_name="claim_extractor",
             message=f"Unexpected error: {exc}",
             error_type="unexpected",
-            usage={**total_usage, "cost_usd": total_cost},
+            usage={**total_usage, "cost_usd": total_cost, "model_used": last_model},
         ) from exc

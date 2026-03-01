@@ -7,6 +7,7 @@ from fastapi import HTTPException, Request
 from src.constants import MVP_UNIVERSE, is_valid_ticker
 from src.dependencies.auth import authenticated_router
 from src.dependencies.rate_limit import limiter
+from src.routes.helpers import sanitize_error_message
 from src.services.exceptions import ConfigurationError, PreconditionError
 from src.services.fundamental_analysis import run_fundamental_analysis
 
@@ -60,19 +61,5 @@ def analyze_ticker(ticker: str, request: Request) -> dict:
         "fundamental_out": result.fundamental_out,
         "tokens_used": result.tokens_used,
         "cost_usd": result.cost_usd,
-        "error_message": _sanitize_error(result.error_message),
+        "error_message": sanitize_error_message(result.error_message, "Analysis"),
     }
-
-
-def _sanitize_error(error_message: str | None) -> str | None:
-    """Return a client-safe error message without internal details."""
-    if error_message is None:
-        return None
-    # Map internal error types to safe messages
-    if "timeout" in error_message.lower():
-        return "Analysis timed out. Please try again."
-    if "api error" in error_message.lower():
-        return "Analysis service error. Please try again later."
-    if "parse" in error_message.lower():
-        return "Analysis produced invalid output. Please try again."
-    return "Analysis failed. Please try again."

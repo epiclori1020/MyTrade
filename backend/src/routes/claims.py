@@ -7,6 +7,7 @@ from fastapi import HTTPException, Request
 
 from src.dependencies.auth import authenticated_router
 from src.dependencies.rate_limit import limiter
+from src.routes.helpers import sanitize_error_message
 from src.services.claim_extraction import run_claim_extraction
 from src.services.exceptions import ConfigurationError, PreconditionError
 
@@ -57,21 +58,5 @@ def extract_claims(analysis_id: UUID, request: Request) -> dict:
         "claims": result.claims,
         "tokens_used": result.tokens_used,
         "cost_usd": result.cost_usd,
-        "error_message": _sanitize_error(result.error_message),
+        "error_message": sanitize_error_message(result.error_message, "Claim extraction"),
     }
-
-
-def _sanitize_error(error_message: str | None) -> str | None:
-    """Return a client-safe error message without internal details."""
-    if error_message is None:
-        return None
-    lower = error_message.lower()
-    if "timeout" in lower:
-        return "Claim extraction timed out. Please try again."
-    if "api error" in lower:
-        return "Claim extraction service error. Please try again later."
-    if "parse" in lower or "schema" in lower or "extraction_failed" in lower:
-        return "Claim extraction produced invalid output. Please try again."
-    if "db" in lower or "database" in lower:
-        return "Failed to save claims. Please try again."
-    return "Claim extraction failed. Please try again."

@@ -128,18 +128,21 @@ Der Data Collector ist **deterministisch** (kein LLM) — reine API-Logik.
 
 **Quelle:** @docs/03_architecture/agents.md (Agent 9), @docs/04_verification/claim-schema.json
 
-- [ ] Agno Agent erstellen: Claim Extractor
+- [x] Claim Extractor Agent erstellen (Direct Anthropic SDK, `claude-haiku-4-5`)
   - Modell: `claude-haiku-4-5` (Light-Tier, ~5K Token Budget)
   - System-Prompt: "Extrahiere alle numerischen Claims aus dem Agent-Output gemäß Schema"
-- [ ] Input: `analysis_runs.fundamental_out` (JSON)
-- [ ] Output: `claims[]` gemäß `claim-schema.json`:
+- [x] Input: `analysis_runs.fundamental_out` (JSON)
+- [x] Output: `claims[]` gemäß `claim-schema.json`:
   - `{claim_id, claim_text, claim_type, value, unit, ticker, period, source_primary, tier, required_tier, trade_critical}`
-- [ ] JSON Schema Validation: Output gegen `claim-schema.json` validieren
-- [ ] Fallback-Chain bei Schema-Fehler:
-  1. 1x Retry mit Haiku (verschärfter Prompt)
-  2. Sonnet 4.6 Fallback
-- [ ] Claims in `claims` Tabelle schreiben
-- [ ] MVP: Mindestens Revenue + P/E als `trade_critical: true` Claims
+- [x] Deterministic post-processing: tier, required_tier, trade_critical via keyword matching
+- [x] Fallback-Chain bei Schema-Fehler:
+  1. 1x Retry mit Haiku (verschärfter Prompt mit Error-Kontext)
+  2. Sonnet 4.6 Fallback (mit original Prompt)
+- [x] Claims in `claims` Tabelle schreiben (batch insert)
+- [x] MVP: Revenue, EPS, P/E, Net Income, FCF, EV/EBITDA als `trade_critical: true` Claims
+- [x] Token-Verbrauch + Kosten in `agent_cost_log` loggen (akkumuliert über Fallback-Chain)
+- [x] API-Endpoint: `POST /api/extract-claims/{analysis_id}` (auth + rate-limited)
+- [x] 162 Tests (89 bestehend + 73 neu) alle grün
 
 ### Step 7: Verification Layer
 

@@ -3,7 +3,6 @@
 import logging
 
 from fastapi import HTTPException, Request
-from pydantic import BaseModel
 
 from src.dependencies.auth import authenticated_router
 from src.dependencies.rate_limit import limiter
@@ -18,18 +17,6 @@ from src.services.policy_engine import (
 logger = logging.getLogger(__name__)
 
 router = authenticated_router(prefix="/api/policy", tags=["policy"])
-
-
-class PreCheckResponse(BaseModel):
-    passed: bool
-    violations: list[dict]
-    policy_snapshot: dict | None
-
-
-class FullCheckResponse(BaseModel):
-    passed: bool
-    violations: list[dict]
-    policy_snapshot: dict | None
 
 
 def _violations_to_dicts(violations) -> list[dict]:

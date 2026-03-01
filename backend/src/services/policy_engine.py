@@ -412,30 +412,11 @@ def run_full_policy(trade_proposal: TradeProposal, user_id: str) -> PolicyResult
         ))
 
     # --- Check 5: Cash reserve (BUY only) ---
-    # Cash reserve check requires knowing total account value (holdings + cash).
-    # In MVP, portfolio_value is computed from holdings only, so available cash
-    # is not determinable. The check activates when broker account balance
-    # is available (Phase 2+, Step 9 Alpaca/IBKR integration).
-    # TODO: Read account balance from broker API to get actual cash position
-    if is_buy and portfolio_value > 0:
-        invested_value = _calculate_portfolio_value(holdings)
-        # Only check when cash position is determinable
-        # (portfolio_value > invested_value implies external cash data available)
-        if portfolio_value > invested_value:
-            remaining_cash_pct = _calculate_remaining_cash_pct(
-                trade_value, holdings, portfolio_value
-            )
-            if remaining_cash_pct < policy.cash_reserve_pct:
-                violations.append(PolicyViolation(
-                    rule="cash_reserve",
-                    message=(
-                        f"Remaining cash {remaining_cash_pct:.1f}% would fall below "
-                        f"minimum of {policy.cash_reserve_pct}%"
-                    ),
-                    severity="blocking",
-                    current_value=round(remaining_cash_pct, 1),
-                    limit_value=policy.cash_reserve_pct,
-                ))
+    # MVP: Stub — Cash Reserve Check braucht den totalen Account-Wert (Holdings + Cash)
+    # vom Broker API. Aktuell ist portfolio_value = invested_value (beide aus Holdings),
+    # daher ist der Cash-Anteil nicht bestimmbar.
+    # Die pure Helper-Funktion _calculate_remaining_cash_pct() existiert bereits und ist getestet.
+    # TODO: Account-Balance von Broker API lesen (Step 9 Alpaca/IBKR Integration)
 
     # --- Check 6: Drawdown kill-switch ---
     drawdown = _calculate_portfolio_drawdown(holdings)
@@ -560,6 +541,7 @@ def _count_monthly_trades(admin, user_id: str) -> int:
             .select("id")
             .eq("user_id", user_id)
             .gte("proposed_at", first_of_month)
+            .neq("status", "rejected")
             .execute()
         )
         return len(resp.data) if resp.data else 0

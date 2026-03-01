@@ -47,7 +47,7 @@ def _mock_admin_table():
     - policy_change_log: .select().eq().order().limit().execute()
     - portfolio_holdings: .select("*").eq().eq().execute()
     - analysis_runs: .select().eq().execute()
-    - trade_log: .select().eq().gte().execute()
+    - trade_log: .select().eq().gte().neq().execute()
     """
     admin = MagicMock()
     tables = {}
@@ -71,9 +71,10 @@ def _mock_admin_table():
         chain_limit = chain_order.limit.return_value
         chain_limit.execute.return_value = SimpleNamespace(data=[])
 
-        # .select().eq().gte().execute() (trade_log)
+        # .select().eq().gte().neq().execute() (trade_log)
         chain_gte = chain_eq.gte.return_value
-        chain_gte.execute.return_value = SimpleNamespace(data=[])
+        chain_neq = chain_gte.neq.return_value
+        chain_neq.execute.return_value = SimpleNamespace(data=[])
 
         tables[name] = mock_table
         return mock_table
@@ -175,11 +176,26 @@ class TestCountMonthlyTrades:
     def test_counts_trades(self):
         admin = _mock_admin_table()
         trade_table = admin.table("trade_log")
-        chain = trade_table.select.return_value.eq.return_value.gte.return_value
+        chain = trade_table.select.return_value.eq.return_value.gte.return_value.neq.return_value
         chain.execute.return_value = SimpleNamespace(
             data=[{"id": "t1"}, {"id": "t2"}, {"id": "t3"}]
         )
         assert _count_monthly_trades(admin, FAKE_USER_ID) == 3
+
+    def test_excludes_rejected_trades(self):
+        """Rejected trades should not count towards monthly limit."""
+        admin = _mock_admin_table()
+        trade_table = admin.table("trade_log")
+        chain = trade_table.select.return_value.eq.return_value.gte.return_value.neq.return_value
+        chain.execute.return_value = SimpleNamespace(
+            data=[{"id": "t1"}, {"id": "t2"}]  # 2 non-rejected trades
+        )
+        result = _count_monthly_trades(admin, FAKE_USER_ID)
+        assert result == 2
+        # Verify .neq was called with correct args
+        trade_table.select.return_value.eq.return_value.gte.return_value.neq.assert_called_once_with(
+            "status", "rejected"
+        )
 
     def test_no_trades(self):
         admin = _mock_admin_table()
@@ -553,10 +569,11 @@ def _setup_full_policy_mocks(admin, analysis_verification=None, holdings=None, t
     chain_eq_eq = holdings_table.select.return_value.eq.return_value.eq.return_value
     chain_eq_eq.execute.return_value = SimpleNamespace(data=holdings or [])
 
-    # trade_log (monthly count)
+    # trade_log (monthly count — .select().eq().gte().neq().execute())
     trades_table = admin.table("trade_log")
     chain_gte = trades_table.select.return_value.eq.return_value.gte.return_value
-    chain_gte.execute.return_value = SimpleNamespace(
+    chain_neq = chain_gte.neq.return_value
+    chain_neq.execute.return_value = SimpleNamespace(
         data=[{"id": f"t{i}"} for i in range(trades_count)]
     )
 
@@ -718,43 +735,6 @@ class TestRunFullPolicy:
         rules = [v.rule for v in result.violations]
         assert "max_trades_per_month" in rules
 
-    @patch("src.services.policy_engine._calculate_portfolio_value")
-    @patch("src.services.policy_engine.get_effective_policy")
-    @patch("src.services.policy_engine.get_supabase_admin")
-    def test_cash_reserve_violated(self, mock_admin_fn, mock_get_policy, mock_portfolio_value):
-        """Cash reserve check triggers when broker account balance is available.
-
-        We mock _calculate_portfolio_value to return different values:
-        - First call (in run_full_policy): returns total account value (with cash)
-        - Subsequent calls (in _calculate_remaining_cash_pct): returns invested value
-        This simulates having broker account balance available (Phase 2+).
-        """
-        admin = _mock_admin_table()
-        mock_admin_fn.return_value = admin
-        mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
-
-        # Holdings worth $9,500 invested
-        _setup_full_policy_mocks(
-            admin,
-            analysis_verification={"has_blocking_disputed": False},
-            holdings=[{"shares": 95, "current_price": 100.0}],
-        )
-
-        # Mock: portfolio_value = $10,000 (total account with $500 cash)
-        # but invested = $9,500 (from holdings)
-        # Called 3x: run_full_policy(portfolio_value), run_full_policy(invested_value),
-        # _calculate_remaining_cash_pct(invested)
-        mock_portfolio_value.side_effect = [10_000.0, 9_500.0, 9_500.0]
-
-        # Trying to buy $1,000 → remaining cash = $500 - $1,000 = -$500
-        # remaining_cash_pct = -500/10000 = -5% (below 5% reserve)
-        proposal = _make_trade_proposal(shares=10, price=100.0)
-        result = run_full_policy(proposal, FAKE_USER_ID)
-
-        assert result.passed is False
-        rules = [v.rule for v in result.violations]
-        assert "cash_reserve" in rules
-
     @patch("src.services.policy_engine._calculate_portfolio_drawdown")
     @patch("src.services.policy_engine.get_effective_policy")
     @patch("src.services.policy_engine.get_supabase_admin")
@@ -815,10 +795,9 @@ class TestRunFullPolicy:
         proposal = _make_trade_proposal()
         result = run_full_policy(proposal, FAKE_USER_ID)
 
-        # No position/cash violations when portfolio is empty
+        # No position violations when portfolio is empty
         rules = [v.rule for v in result.violations]
         assert "max_single_position" not in rules
-        assert "cash_reserve" not in rules
 
     @patch("src.services.policy_engine.get_effective_policy")
     @patch("src.services.policy_engine.get_supabase_admin")
@@ -840,7 +819,6 @@ class TestRunFullPolicy:
 
         rules = [v.rule for v in result.violations]
         assert "max_single_position" not in rules
-        assert "cash_reserve" not in rules
 
     @patch("src.services.policy_engine.get_effective_policy")
     @patch("src.services.policy_engine.get_supabase_admin")

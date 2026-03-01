@@ -148,20 +148,23 @@ Der Data Collector ist **deterministisch** (kein LLM) — reine API-Logik.
 
 **Quelle:** @docs/04_verification/tier-system.md, @docs/04_verification/claim-schema.json
 
-- [ ] Alpha Vantage API-Client implementieren (Verification-Quelle)
+- [x] Alpha Vantage API-Client wiederverwendet (bereits aus Step 4, `services/alpha_vantage.py`)
   - Rate Limit: max. 25 calls/Tag (free Tier)
-- [ ] Cross-Check Logik implementieren:
-  - Revenue: Finnhub-Wert vs. Alpha Vantage-Wert
-  - P/E Ratio: Finnhub-Wert vs. Alpha Vantage-Wert
-- [ ] Status-Logik:
-  - Abweichung ≤ 2% → `verified`
-  - Abweichung ≤ 5% → `consistent`
+- [x] Cross-Check Logik implementieren:
+  - Revenue: Claim-Wert vs. Alpha Vantage-Wert
+  - P/E Ratio, EPS, EV/EBITDA, P/B, ROE: Claim-Wert vs. AV-Wert
+- [x] Status-Logik:
+  - Abweichung ≤ 5% → `consistent` (MVP: kein `verified` ohne Tier A/SEC EDGAR)
   - Abweichung > 5% → `disputed` (RED FLAG)
-  - Keine 2. Quelle verfügbar → `unverified`
+  - Keine 2. Quelle verfügbar → `unverified` (keine DB-Zeile)
   - Trade-kritisch + nur Tier B → `manual_check`
-- [ ] Ergebnisse in `verification_results` Tabelle schreiben
-- [ ] Disputed + trade_critical → blockiert Trade Plan
-- [ ] Verification Summary in `analysis_runs.verification` speichern (z.B. `{verified: 5, consistent: 2, unverified: 1, disputed: 0}`)
+- [x] Ergebnisse in `verification_results` Tabelle schreiben (batch insert)
+- [x] Disputed + trade_critical → `has_blocking_disputed=true` in Summary
+- [x] Verification Summary in `analysis_runs.verification` speichern
+- [x] Idempotenz-Check: Re-Verification wird geblockt wenn bereits Ergebnisse existieren
+- [x] API-Endpoint: `POST /api/verify/{analysis_id}` (auth + rate-limited)
+- [x] 232 Tests (174 bestehend + 58 neu) alle grün
+- [x] Security Review: F1 (DB error string leak) gefixt, alle Checks PASS
 
 ### Step 8: Policy Engine
 

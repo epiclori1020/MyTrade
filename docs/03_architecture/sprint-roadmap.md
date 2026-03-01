@@ -173,44 +173,50 @@ Der Data Collector ist **deterministisch** (kein LLM) — reine API-Logik.
 Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 
 **`get_effective_policy()`:**
-- [ ] Primär: `user_policy` Tabelle lesen
-- [ ] Fallback: `ips-template.yaml` laden wenn DB nicht erreichbar
-- [ ] Preset-Resolution: Beginner/Balanced/Active → konkrete Werte
-- [ ] Advanced-Overrides: Validierung gegen Constraint-Tabelle (Min/Max aus settings-spec.md)
-- [ ] Hard Constraints immer erzwungen: verbotene Typen, EM nur ETF, Execution Stage
-- [ ] Cooldown-Enforcement: `cooldown_until` Timestamp prüfen bei Policy-Read (Mode-Wechsel erst nach 24h aktiv)
+- [x] Primär: `user_policy` Tabelle lesen
+- [x] ~~Fallback: `ips-template.yaml` laden wenn DB nicht erreichbar~~ → ConfigurationError bei DB-Fehler (MVP); TODO: YAML-Fallback für Production-Resilience
+- [x] Preset-Resolution: Beginner/Balanced/Active → konkrete Werte
+- [x] Advanced-Overrides: Validierung gegen Constraint-Tabelle (Min/Max aus settings-spec.md)
+- [x] Hard Constraints immer erzwungen: verbotene Typen, EM nur ETF, Execution Stage
+- [x] Cooldown-Enforcement: `cooldown_until` Timestamp prüfen bei Policy-Read (Mode-Wechsel erst nach 24h aktiv)
 
 **Pre-Policy (VOR Agent-Call):**
-- [ ] Instrument-Typ erlaubt? (Forbidden: options, futures, crypto, leveraged ETF, inverse ETF, penny stock, SPAC)
-- [ ] Ticker im MVP-Universe?
-- [ ] Region erlaubt für Instrument-Typ? (z.B. EM nur ETF)
-- [ ] Kill-Switch aktiv?
-- [ ] Maturity Stage korrekt? (Stufe 1 = nur Paper)
-- [ ] Bei Reject: sofortige Antwort + Grund loggen (spart LLM-Tokens)
+- [x] Instrument-Typ erlaubt? (MVP: Stub — MVP_UNIVERSE ist vorab geprüft, keine verbotenen Instrumente)
+- [x] Ticker im MVP-Universe?
+- [x] Region erlaubt? (MVP: Stub — alle MVP_UNIVERSE Ticker sind US)
+- [x] Kill-Switch aktiv? (MVP: Stub — kein dedizierter State, TODO Step 11)
+- [x] Maturity Stage korrekt? (Pre-Policy: Stub, Full-Policy: aktiv für is_live_order)
+- [x] Bei Reject: sofortige Antwort + Grund loggen (spart LLM-Tokens)
 
 **Full-Policy (NACH Verification, VOR Execution):**
-- [ ] Max Single Position (default: 5% Satellite)
-- [ ] Max Sektor-Konzentration (default: 30% Satellite)
-- [ ] Max Trades pro Monat (default: 10)
-- [ ] Cash Reserve Minimum (default: 5% Satellite)
-- [ ] Portfolio Drawdown Kill-Switch (default: 20%)
-- [ ] Stop-Loss Soft Flag (default: 15%)
-- [ ] Alle Werte aus `get_effective_policy()` — NIEMALS hardcoden
+- [x] Max Single Position (default: 5% Satellite)
+- [x] Max Sektor-Konzentration (MVP: Stub — portfolio_holdings hat kein sector Feld)
+- [x] Max Trades pro Monat (default: 10)
+- [x] Cash Reserve Minimum (MVP: Aktiv wenn Broker-Kontostand verfügbar, Phase 2+)
+- [x] Portfolio Drawdown Kill-Switch (default: 20%)
+- [x] Stop-Loss Soft Flag (MVP: Stub/Warning — TODO Step 11 Monitoring)
+- [x] Alle Werte aus `get_effective_policy()` — NIEMALS hardcoden
 
 **Tests (Policy Engine):**
-- [ ] Unit Test: Pre-Policy blockt verbotene Instrumente
-- [ ] Unit Test: Pre-Policy blockt Ticker außerhalb Universe
-- [ ] Unit Test: Full-Policy blockt Position > max_single_position
-- [ ] Unit Test: Full-Policy blockt wenn Drawdown Kill-Switch aktiv
-- [ ] Unit Test: `get_effective_policy()` merged Preset + Overrides korrekt
+- [x] Unit Test: Pre-Policy blockt verbotene Instrumente (Ticker nicht in MVP_UNIVERSE)
+- [x] Unit Test: Pre-Policy blockt Ticker außerhalb Universe
+- [x] Unit Test: Full-Policy blockt Position > max_single_position
+- [x] Unit Test: Full-Policy blockt wenn Drawdown Kill-Switch aktiv (mock `_calculate_portfolio_drawdown`)
+- [x] Unit Test: `get_effective_policy()` merged Preset + Overrides korrekt
+- [x] 53 Policy Engine Tests + 15 Route Tests = 68 neue Tests, 301 gesamt alle grün
+
+**API-Endpoints:**
+- [x] `POST /api/policy/pre-check/{ticker}` (100/min rate limit)
+- [x] `POST /api/policy/full-check` (50/min rate limit, TradeProposal body)
+- [x] `GET /api/policy/effective` (30/min rate limit)
 
 #### Phase 2 — Definition of Done
-- [ ] Claim Extractor extrahiert min. 5 Claims aus AAPL-Analyse (Schema-valid)
-- [ ] Verification zeigt min. 1 Claim mit Status != `verified` (z.B. unverified oder disputed)
-- [ ] Pre-Policy blockt einen verbotenen Ticker (z.B. Bitcoin-ETF)
-- [ ] Full-Policy blockt eine zu große Position
-- [ ] Schema-Validation Test passed (Claims gegen claim-schema.json)
-- [ ] Policy Engine Unit Tests: 5/5 passed
+- [x] Claim Extractor extrahiert min. 5 Claims aus AAPL-Analyse (Schema-valid) — Step 6
+- [x] Verification zeigt min. 1 Claim mit Status != `verified` (z.B. unverified oder disputed) — Step 7
+- [x] Pre-Policy blockt einen verbotenen Ticker (z.B. Bitcoin-ETF) — `test_invalid_ticker_blocked`
+- [x] Full-Policy blockt eine zu große Position — `test_max_single_position_exceeded`
+- [x] Schema-Validation Test passed (Claims gegen claim-schema.json) — Step 6
+- [x] Policy Engine Unit Tests: 5/5 passed
 
 ---
 

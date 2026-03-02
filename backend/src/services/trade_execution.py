@@ -48,22 +48,27 @@ def propose_trade(user_id: str, trade_proposal) -> dict:
     }
 
     resp = admin.table("trade_log").insert(row).execute()
+    if not resp.data:
+        logger.error("trade_log insert returned empty data for user %s", user_id)
+        raise RuntimeError("Failed to create trade proposal")
     return resp.data[0]
 
 
 def approve_trade(trade_id: str, user_id: str) -> dict:
     """User approves a proposed trade -> execute via broker.
 
-    6-step flow:
+    7-step flow:
     1. Expire stale trades (prevents approving an expired trade)
     2. Read trade from trade_log
     3. Ownership check (same message for not-found and wrong-user)
     4. Status guard (must be 'proposed')
-    5. Update status -> 'approved' + approved_at
-    6. Call broker submit_order() -> 'executed' or 'failed'
+    5. Atomic update status -> 'approved' + approved_at
+       (conditional on status='proposed' to prevent TOCTOU race)
+    6. Verify atomic update succeeded (concurrent modification check)
+    7. Call broker submit_order() -> 'executed' or 'failed'
 
     Known limitation (MVP-acceptable): If the server crashes between
-    step 5 (status='approved') and step 6 (broker call), the trade
+    step 5 (status='approved') and step 7 (broker call), the trade
     stays permanently in 'approved' status with no recovery mechanism.
     Step 11 (Monitoring) should add a cleanup job for orphaned 'approved'
     trades older than 1 hour.
@@ -91,12 +96,18 @@ def approve_trade(trade_id: str, user_id: str) -> dict:
     if trade["status"] != "proposed":
         raise PreconditionError("Trade is not in proposed status")
 
-    # Update to approved
+    # Atomic update to approved — .eq("status", "proposed") prevents TOCTOU race
     now_iso = datetime.now(timezone.utc).isoformat()
-    admin.table("trade_log").update({
-        "status": "approved",
-        "approved_at": now_iso,
-    }).eq("id", trade_id).execute()
+    update_resp = (
+        admin.table("trade_log")
+        .update({"status": "approved", "approved_at": now_iso})
+        .eq("id", trade_id)
+        .eq("status", "proposed")
+        .execute()
+    )
+
+    if not update_resp.data:
+        raise PreconditionError("Trade is not in proposed status")
 
     # Execute via broker
     order = Order(
@@ -150,35 +161,35 @@ def approve_trade(trade_id: str, user_id: str) -> dict:
 def reject_trade(trade_id: str, user_id: str, reason: str | None = None) -> dict:
     """User rejects a proposed trade.
 
-    Updates status -> 'rejected' + optional rejection_reason.
+    Atomic conditional update — ownership, status guard, and update happen
+    in a single DB call via .eq("user_id", ...).eq("status", "proposed").
+    This prevents TOCTOU races. All failure cases (not found, wrong user,
+    wrong status) return the same "Trade not found" message (no info leak).
+
     No broker call needed.
 
     Raises:
-        PreconditionError: Trade not found, wrong user, or wrong status.
+        PreconditionError: Trade not found, wrong user, or not in proposed status.
     """
     expire_stale_trades()
 
     admin = get_supabase_admin()
 
-    # Read trade
-    resp = admin.table("trade_log").select("*").eq("id", trade_id).execute()
-    data = resp.data
-
-    # Ownership check
-    if not data or data[0].get("user_id") != user_id:
-        raise PreconditionError("Trade not found")
-
-    trade = data[0]
-
-    # Status guard
-    if trade["status"] != "proposed":
-        raise PreconditionError("Trade is not in proposed status")
-
     update = {"status": "rejected"}
     if reason:
         update["rejection_reason"] = reason
 
-    admin.table("trade_log").update(update).eq("id", trade_id).execute()
+    resp = (
+        admin.table("trade_log")
+        .update(update)
+        .eq("id", trade_id)
+        .eq("user_id", user_id)
+        .eq("status", "proposed")
+        .execute()
+    )
+
+    if not resp.data:
+        raise PreconditionError("Trade not found")
 
     return {
         "trade_id": trade_id,

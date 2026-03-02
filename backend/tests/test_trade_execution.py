@@ -3,8 +3,8 @@
 All tests mock DB calls and broker adapter — NO real API calls.
 
 Structure:
-- propose_trade tests (5)
-- approve_trade tests (10)
+- propose_trade tests (6)
+- approve_trade tests (11)
 - reject_trade tests (7)
 - expire_stale_trades tests (5)
 - expire called from approve/reject tests (2)
@@ -40,6 +40,8 @@ def _mock_admin_table():
     - trade_log: .insert(row).execute()
     - trade_log: .select("*").eq("id", id).execute()
     - trade_log: .update(data).eq("id", id).execute()
+    - trade_log: .update(data).eq("id", id).eq("status", "proposed").execute()
+    - trade_log: .update(data).eq("id", id).eq("user_id", uid).eq("status", "proposed").execute()
     - trade_log: .select("id").eq("status", ...).lt("proposed_at", ...).execute()
     """
     admin = MagicMock()
@@ -71,8 +73,20 @@ def _mock_admin_table():
         chain_eq = mock_table.select.return_value.eq.return_value
         chain_eq.execute.return_value = SimpleNamespace(data=[])
 
-        # .update(data).eq("id", id).execute() — for status updates
+        # .update(data).eq("id", id).execute() — for non-atomic status updates
         mock_table.update.return_value.eq.return_value.execute.return_value = SimpleNamespace(data=[])
+
+        # .update(data).eq("id", id).eq("status", "proposed").execute()
+        # — for atomic approve (2-eq chain, defaults to success)
+        mock_table.update.return_value.eq.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[{"id": FAKE_TRADE_ID}]
+        )
+
+        # .update(data).eq("id", id).eq("user_id", uid).eq("status", "proposed").execute()
+        # — for atomic reject (3-eq chain, defaults to success)
+        mock_table.update.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[{"id": FAKE_TRADE_ID}]
+        )
 
         # .select("id").eq("status", "proposed").lt("proposed_at", cutoff).execute()
         # for expire_stale_trades
@@ -186,6 +200,16 @@ class TestProposeTrade:
         admin.table("trade_log").insert.return_value.execute.side_effect = Exception("DB connection failed")
 
         with pytest.raises(Exception, match="DB connection failed"):
+            propose_trade(FAKE_USER_ID, _make_trade_proposal())
+
+    @patch("src.services.trade_execution.get_supabase_admin")
+    def test_empty_insert_response_raises_runtime_error(self, mock_admin_fn):
+        """Guard against Supabase returning empty data on insert."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        admin.table("trade_log").insert.return_value.execute.return_value = SimpleNamespace(data=[])
+
+        with pytest.raises(RuntimeError, match="Failed to create trade proposal"):
             propose_trade(FAKE_USER_ID, _make_trade_proposal())
 
 
@@ -402,6 +426,28 @@ class TestApproveTrade:
         assert result["rejection_reason"] == "Broker connection failed"
         mock_log_error.assert_called_once()
 
+    @patch("src.services.trade_execution.get_supabase_admin")
+    @patch("src.services.trade_execution.expire_stale_trades")
+    def test_concurrent_status_change_raises_precondition_error(
+        self, mock_expire, mock_admin_fn
+    ):
+        """TOCTOU guard: SELECT returns proposed, but atomic UPDATE finds status already changed."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        trade_table = admin.table("trade_log")
+
+        # SELECT returns proposed trade (passes ownership + status guards)
+        trade_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[_make_proposed_trade()]
+        )
+        # Atomic UPDATE returns empty (concurrent request changed status between SELECT and UPDATE)
+        trade_table.update.return_value.eq.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[]
+        )
+
+        with pytest.raises(PreconditionError, match="Trade is not in proposed status"):
+            approve_trade(FAKE_TRADE_ID, FAKE_USER_ID)
+
 
 # ============================================================
 # reject_trade Tests
@@ -409,15 +455,19 @@ class TestApproveTrade:
 
 
 class TestRejectTrade:
+    """Tests for reject_trade — uses atomic conditional UPDATE.
+
+    reject_trade uses .update().eq("id", ...).eq("user_id", ...).eq("status", "proposed")
+    so ownership, status guard, and update are atomic (no TOCTOU race).
+    All failure cases return "Trade not found" (no info leak).
+    """
+
     @patch("src.services.trade_execution.get_supabase_admin")
     @patch("src.services.trade_execution.expire_stale_trades")
     def test_success_returns_rejected_status(self, mock_expire, mock_admin_fn):
         admin = _mock_admin_table()
         mock_admin_fn.return_value = admin
-        trade_table = admin.table("trade_log")
-        trade_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
-            data=[_make_proposed_trade()]
-        )
+        # 3-eq chain defaults to success in factory
 
         result = reject_trade(FAKE_TRADE_ID, FAKE_USER_ID)
 
@@ -430,14 +480,12 @@ class TestRejectTrade:
         admin = _mock_admin_table()
         mock_admin_fn.return_value = admin
         trade_table = admin.table("trade_log")
-        trade_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
-            data=[_make_proposed_trade()]
-        )
+        # 3-eq chain defaults to success in factory
 
         result = reject_trade(FAKE_TRADE_ID, FAKE_USER_ID, reason="Market conditions changed")
 
         assert result["rejection_reason"] == "Market conditions changed"
-        # Verify reason was included in the DB update
+        # Verify reason was included in the DB update payload
         updated_data = trade_table.update.call_args[0][0]
         assert updated_data.get("rejection_reason") == "Market conditions changed"
 
@@ -447,9 +495,7 @@ class TestRejectTrade:
         admin = _mock_admin_table()
         mock_admin_fn.return_value = admin
         trade_table = admin.table("trade_log")
-        trade_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
-            data=[_make_proposed_trade()]
-        )
+        # 3-eq chain defaults to success in factory
 
         result = reject_trade(FAKE_TRADE_ID, FAKE_USER_ID)
 
@@ -461,9 +507,14 @@ class TestRejectTrade:
     @patch("src.services.trade_execution.get_supabase_admin")
     @patch("src.services.trade_execution.expire_stale_trades")
     def test_not_found_raises_precondition_error(self, mock_expire, mock_admin_fn):
+        """Atomic update returns empty when trade doesn't exist."""
         admin = _mock_admin_table()
         mock_admin_fn.return_value = admin
-        # Default mock returns empty data (not found)
+        trade_table = admin.table("trade_log")
+        # Override 3-eq chain to return empty (no matching row)
+        trade_table.update.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[]
+        )
 
         with pytest.raises(PreconditionError, match="Trade not found"):
             reject_trade(FAKE_TRADE_ID, FAKE_USER_ID)
@@ -471,12 +522,13 @@ class TestRejectTrade:
     @patch("src.services.trade_execution.get_supabase_admin")
     @patch("src.services.trade_execution.expire_stale_trades")
     def test_wrong_user_same_message_as_not_found(self, mock_expire, mock_admin_fn):
-        """No info leak — same error message for not-found and wrong-user."""
+        """No info leak — wrong user_id in .eq() causes empty result, same error as not-found."""
         admin = _mock_admin_table()
         mock_admin_fn.return_value = admin
         trade_table = admin.table("trade_log")
-        trade_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
-            data=[_make_proposed_trade(user_id="different-user-id")]
+        # Atomic update with wrong user_id returns empty
+        trade_table.update.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[]
         )
 
         with pytest.raises(PreconditionError, match="Trade not found"):
@@ -485,27 +537,29 @@ class TestRejectTrade:
     @patch("src.services.trade_execution.get_supabase_admin")
     @patch("src.services.trade_execution.expire_stale_trades")
     def test_already_approved_raises_precondition_error(self, mock_expire, mock_admin_fn):
+        """Atomic update with .eq("status", "proposed") won't match already-approved trades."""
         admin = _mock_admin_table()
         mock_admin_fn.return_value = admin
         trade_table = admin.table("trade_log")
-        trade_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
-            data=[_make_proposed_trade(status="approved")]
+        trade_table.update.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[]
         )
 
-        with pytest.raises(PreconditionError, match="Trade is not in proposed status"):
+        with pytest.raises(PreconditionError, match="Trade not found"):
             reject_trade(FAKE_TRADE_ID, FAKE_USER_ID)
 
     @patch("src.services.trade_execution.get_supabase_admin")
     @patch("src.services.trade_execution.expire_stale_trades")
     def test_already_executed_raises_precondition_error(self, mock_expire, mock_admin_fn):
+        """Atomic update with .eq("status", "proposed") won't match already-executed trades."""
         admin = _mock_admin_table()
         mock_admin_fn.return_value = admin
         trade_table = admin.table("trade_log")
-        trade_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
-            data=[_make_proposed_trade(status="executed")]
+        trade_table.update.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[]
         )
 
-        with pytest.raises(PreconditionError, match="Trade is not in proposed status"):
+        with pytest.raises(PreconditionError, match="Trade not found"):
             reject_trade(FAKE_TRADE_ID, FAKE_USER_ID)
 
 
@@ -649,13 +703,10 @@ class TestExpireCalledFromApproveReject:
     @patch("src.services.trade_execution.get_supabase_admin")
     @patch("src.services.trade_execution.expire_stale_trades")
     def test_reject_calls_expire_before_processing(self, mock_expire, mock_admin_fn):
-        """reject_trade must call expire_stale_trades before reading the trade."""
+        """reject_trade must call expire_stale_trades before the atomic update."""
         admin = _mock_admin_table()
         mock_admin_fn.return_value = admin
-        trade_table = admin.table("trade_log")
-        trade_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
-            data=[_make_proposed_trade()]
-        )
+        # 3-eq chain defaults to success in factory
 
         reject_trade(FAKE_TRADE_ID, FAKE_USER_ID)
 

@@ -70,3 +70,17 @@ class AgentError(Exception):
         self.error_type = error_type
         self.usage = usage  # {"input_tokens": N, "output_tokens": N}
         super().__init__(f"[{agent_name}] {message}")
+
+
+# --- Broker errors (connection failures, order rejections) ---
+
+
+class BrokerError(DataProviderError):
+    """Broker API failure (Alpaca, IBKR).
+
+    Inherits DataProviderError so retry_with_backoff() catches it
+    for read-only calls (get_positions, get_account).
+    """
+
+    def __init__(self, broker: str, message: str, status_code: int | None = None):
+        super().__init__(provider=broker, message=message, status_code=status_code)

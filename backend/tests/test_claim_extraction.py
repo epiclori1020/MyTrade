@@ -558,3 +558,64 @@ class TestPhaseBOrchestration:
 
         assert result.status == "failed"
         assert "unexpected" in result.error_message.lower()
+
+
+class TestWriteRetryIntegration:
+    """Tests for supabase_write_with_retry integration in claim_extraction."""
+
+    @patch("src.services.claim_extraction.supabase_write_with_retry", return_value=True)
+    @patch("src.services.claim_extraction.log_error")
+    @patch("src.services.claim_extraction.call_claim_extractor")
+    @patch("src.services.claim_extraction.get_settings")
+    @patch("src.services.claim_extraction.get_supabase_admin")
+    def test_claims_insert_uses_write_retry(
+        self, mock_admin_fn, mock_settings, mock_agent, mock_log_error, mock_write_retry
+    ):
+        """Claims INSERT must go through supabase_write_with_retry, not raw insert."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        mock_settings.return_value.anthropic_api_key = "test-key"
+
+        runs_table = admin.table("analysis_runs")
+        runs_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[SAMPLE_ANALYSIS_ROW]
+        )
+
+        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE)
+
+        result = run_claim_extraction(FAKE_ANALYSIS_ID, FAKE_USER_ID)
+
+        assert result.status == "completed"
+        mock_write_retry.assert_called_once()
+        # Verify description contains analysis_id for debugging
+        _, kwargs = mock_write_retry.call_args
+        assert FAKE_ANALYSIS_ID in kwargs.get("description", "")
+
+    @patch("src.services.claim_extraction.supabase_write_with_retry", return_value=False)
+    @patch("src.services.claim_extraction.log_error")
+    @patch("src.services.claim_extraction.call_claim_extractor")
+    @patch("src.services.claim_extraction.get_settings")
+    @patch("src.services.claim_extraction.get_supabase_admin")
+    def test_write_retry_failure_returns_failed(
+        self, mock_admin_fn, mock_settings, mock_agent, mock_log_error, mock_write_retry
+    ):
+        """When supabase_write_with_retry returns False, result is failed with 0 claims."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        mock_settings.return_value.anthropic_api_key = "test-key"
+
+        runs_table = admin.table("analysis_runs")
+        runs_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[SAMPLE_ANALYSIS_ROW]
+        )
+
+        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE)
+
+        result = run_claim_extraction(FAKE_ANALYSIS_ID, FAKE_USER_ID)
+
+        assert result.status == "failed"
+        assert result.claims_count == 0
+        assert result.error_message == "Failed to write claims to DB"
+        # Tokens were consumed even though write failed
+        assert result.tokens_used == 1300
+        assert result.cost_usd > 0

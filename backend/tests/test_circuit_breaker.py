@@ -133,15 +133,16 @@ class TestClosedToOpenTransition:
     @patch("src.services.circuit_breaker.log_error")
     def test_log_error_called_on_open(self, mock_log_error):
         """log_error must be called with 'circuit_open' when breaker opens."""
+        from unittest.mock import ANY
+
         breaker = CircuitBreaker("test")
         _open_breaker(breaker)
         mock_log_error.assert_called_once_with(
             "circuit_breaker",
             "circuit_open",
-            mock_log_error.call_args[0][2],  # message — checked loosely below
+            ANY,  # message — checked below
         )
-        _, error_type, message = mock_log_error.call_args[0]
-        assert error_type == "circuit_open"
+        message = mock_log_error.call_args[0][2]
         assert "test" in message
 
     @patch("src.services.circuit_breaker.log_error")

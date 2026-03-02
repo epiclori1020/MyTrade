@@ -168,15 +168,13 @@ class TestTryRepairJson:
 
     def test_valid_json_wrong_schema_returns_none(self):
         """Valid JSON that does not match the expected Pydantic schema returns None."""
-        # 'value' must be an int, but here it is a string that cannot be coerced
-        raw = '{"name": "echo", "value": "not-an-int", "extra_unexpected_field_only": true}'
+        # Completely wrong structure: schema expects {name: str, value: int}
+        # but input has neither field — guaranteed ValidationError
+        raw = '{"unrelated_field": true, "another": [1,2,3]}'
 
         result = try_repair_json(raw, SampleSchema)
 
-        # If json_repair coerces "not-an-int" to something invalid for int:
-        # expect None. If for some reason pydantic accepts it, we just assert type.
-        # The key assertion: no exception is raised and return type is correct.
-        assert result is None or isinstance(result, SampleSchema)
+        assert result is None
 
     def test_json_missing_required_field_returns_none(self):
         """JSON that is valid but missing a required schema field returns None."""

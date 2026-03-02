@@ -311,6 +311,32 @@ class TestSubmitOrder:
 
     @patch("src.services.alpaca_paper.get_settings")
     @patch("httpx.post")
+    def test_http_error_with_non_json_body_falls_back_to_status_code(
+        self, mock_post, mock_get_settings
+    ):
+        """HTTP error with non-JSON response body: falls back to status code as message."""
+        mock_get_settings.return_value = _make_settings()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.content = b"<html>Internal Server Error</html>"
+        mock_response.json.side_effect = ValueError("No JSON")
+        mock_request = MagicMock()
+        error = httpx.HTTPStatusError(
+            message="HTTP 500", request=mock_request, response=mock_response
+        )
+
+        mock_post.return_value = MagicMock()
+        mock_post.return_value.raise_for_status.side_effect = error
+
+        adapter = _make_adapter()
+        result = adapter.submit_order(_make_limit_order())
+
+        assert result.success is False
+        assert result.error_message == "500"
+
+    @patch("src.services.alpaca_paper.get_settings")
+    @patch("httpx.post")
     def test_timeout_raises_broker_error(self, mock_post, mock_get_settings):
         """Timeout on submit_order raises BrokerError (no retry)."""
         mock_get_settings.return_value = _make_settings()

@@ -99,7 +99,10 @@ class AlpacaPaperAdapter(BrokerAdapter):
                 executed_at=data.get("filled_at"),
             )
         except httpx.HTTPStatusError as exc:
-            error_body = exc.response.json() if exc.response.content else {}
+            try:
+                error_body = exc.response.json() if exc.response.content else {}
+            except Exception:
+                error_body = {}
             error_msg = error_body.get("message", str(exc.response.status_code))
             logger.error("Alpaca order rejected: %s", error_msg)
             return OrderResult(

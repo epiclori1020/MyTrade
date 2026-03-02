@@ -10,7 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.config import get_settings
 from src.dependencies.rate_limit import limiter, rate_limit_exceeded_handler
-from src.routes import analysis, claims, data, health, policy, verification
+from src.routes import analysis, claims, data, health, policy, trades, verification
 
 logger = logging.getLogger(__name__)
 
@@ -100,3 +100,4 @@ app.include_router(analysis.router)
 app.include_router(claims.router)
 app.include_router(verification.router)
 app.include_router(policy.router)
+app.include_router(trades.router)

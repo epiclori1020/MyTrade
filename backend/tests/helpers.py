@@ -11,4 +11,6 @@ def make_test_settings() -> Settings:
         finnhub_api_key="test-finnhub-key",
         alpha_vantage_api_key="test-av-key",
         anthropic_api_key="test-anthropic-key",
+        alpaca_api_key="test-alpaca-key",
+        alpaca_secret_key="test-alpaca-secret",
     )

@@ -226,18 +226,18 @@ Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 
 **Quelle:** @docs/09_broker/broker-router.md, @docs/05_risk/execution-contract.md
 
-- [ ] Abstraktes `BrokerAdapter` Interface implementieren:
+- [x] Abstraktes `BrokerAdapter` Interface implementieren:
   - `submit_order(order) → OrderResult`
   - `get_positions() → list[Position]`
   - `get_account() → AccountInfo`
-- [ ] `AlpacaPaperAdapter` implementieren (Stufe 1)
-- [ ] Prüfung: `ALPACA_PAPER_MODE=true` vor JEDEM API-Call
-- [ ] Trade-Vorschlag in `trade_log` schreiben (Status: `proposed`)
-- [ ] Trade-Ausführung: Status `proposed` → `executed` (Paper)
-- [ ] Broker-Fehler: Order Rejected → Grund in `trade_log.rejection_reason` loggen
-- [ ] API-Endpoint: `POST /api/trades/{trade_id}/approve` (User-JWT, nicht service_role)
-- [ ] API-Endpoint: `POST /api/trades/{trade_id}/reject`
-- [ ] Unbestätigte Orders verfallen nach 24 Stunden
+- [x] `AlpacaPaperAdapter` implementieren (Stufe 1)
+- [x] Prüfung: `ALPACA_PAPER_MODE=true` vor JEDEM API-Call
+- [x] Trade-Vorschlag in `trade_log` schreiben (Status: `proposed`)
+- [x] Trade-Ausführung: Status `proposed` → `executed` (Paper)
+- [x] Broker-Fehler: Order Rejected → Grund in `trade_log.rejection_reason` loggen
+- [x] API-Endpoint: `POST /api/trades/{trade_id}/approve` (User-JWT, nicht service_role)
+- [x] API-Endpoint: `POST /api/trades/{trade_id}/reject`
+- [x] Unbestätigte Orders verfallen nach 24 Stunden
 
 ### Step 10: Error Handling
 

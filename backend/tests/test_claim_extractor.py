@@ -310,6 +310,75 @@ class TestCallClaimExtractor:
         assert json.dumps(SAMPLE_FUNDAMENTAL_OUT, indent=2, ensure_ascii=False) in user_content
 
 
+class TestAttemptExtractionJsonRepair:
+    """Tests for the JSON repair path inside _attempt_extraction."""
+
+    @patch("src.agents.claim_extractor.try_repair_json")
+    @patch("src.agents.claim_extractor.extract_raw_text")
+    @patch("src.agents.claim_extractor._get_client")
+    def test_json_repair_succeeds_in_attempt_extraction(
+        self, mock_get_client, mock_extract, mock_repair
+    ):
+        """Within _attempt_extraction, parsed_output=None but JSON repair succeeds.
+
+        Expect: claims returned from first Haiku attempt without going to retry.
+        """
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_client.messages.parse.return_value = _make_mock_response(
+            parsed_output=None, stop_reason="max_tokens", input_tokens=800, output_tokens=100
+        )
+
+        mock_extract.return_value = '{"claims": []}'
+
+        # Build a repaired RawClaimsOutput mock with .claims list
+        repaired_claim = MagicMock()
+        repaired_claim.model_dump.return_value = SAMPLE_CLAIMS_OUTPUT.claims[0].model_dump()
+        repaired_model = MagicMock(spec=RawClaimsOutput)
+        repaired_model.claims = [repaired_claim]
+        mock_repair.return_value = repaired_model
+
+        claims, usage = call_claim_extractor("AAPL", SAMPLE_FUNDAMENTAL_OUT)
+
+        # Only one LLM call — repair avoided the retry
+        mock_client.messages.parse.assert_called_once()
+        assert len(claims) == 1
+        assert usage["model_used"] == MODEL_HAIKU
+
+    @patch("src.agents.claim_extractor.try_repair_json")
+    @patch("src.agents.claim_extractor.extract_raw_text")
+    @patch("src.agents.claim_extractor._get_client")
+    def test_json_repair_fails_in_attempt_extraction(
+        self, mock_get_client, mock_extract, mock_repair
+    ):
+        """Within _attempt_extraction, parsed_output=None and repair returns None.
+
+        Expect: the attempt returns (None, usage, error_desc), triggering the retry chain.
+        The overall call_claim_extractor escalates to the Haiku retry attempt.
+        """
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Attempt 1: parse fails, repair fails
+        # Attempt 2: parse fails, repair fails
+        # Attempt 3 (Sonnet): succeeds
+        mock_client.messages.parse.side_effect = [
+            _make_mock_response(parsed_output=None, stop_reason="max_tokens"),
+            _make_mock_response(parsed_output=None, stop_reason="max_tokens"),
+            _make_mock_response(parsed_output=SAMPLE_CLAIMS_OUTPUT),
+        ]
+
+        mock_extract.return_value = "malformed json"
+        mock_repair.return_value = None
+
+        claims, usage = call_claim_extractor("AAPL", SAMPLE_FUNDAMENTAL_OUT)
+
+        # Repair failed on both Haiku attempts → escalated to Sonnet
+        assert mock_client.messages.parse.call_count == 3
+        assert len(claims) == 2
+        assert usage["model_used"] == MODEL_SONNET
+
+
 # --- Client Singleton Tests ---
 
 

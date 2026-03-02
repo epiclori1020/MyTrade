@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable
 from typing import TypeVar
 
-from src.services.exceptions import DataProviderError
+from src.services.exceptions import CircuitBreakerOpenError, DataProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,9 @@ def retry_with_backoff(
             last_error = exc
             if on_error:
                 on_error(exc, attempt)
+            # Early-exit for circuit breaker — no point retrying a known-down provider
+            if isinstance(exc, CircuitBreakerOpenError):
+                break
             if attempt < max_retries:
                 delay = base_delay * (2 ** (attempt - 1))
                 logger.warning(

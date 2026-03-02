@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from src.config import get_settings
 from src.services.exceptions import AgentError
+from src.services.llm_json_repair import extract_raw_text, try_repair_json
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,15 @@ def _attempt_extraction(
     usage["output_tokens"] = response.usage.output_tokens
 
     if response.parsed_output is None:
+        # Try JSON repair before giving up this attempt
+        raw_text = extract_raw_text(response)
+        if raw_text:
+            repaired = try_repair_json(raw_text, RawClaimsOutput)
+            if repaired is not None:
+                logger.info("JSON repair succeeded for claim_extractor (%s)", model)
+                claims = [claim.model_dump() for claim in repaired.claims]
+                return claims, usage, None
+
         error_desc = f"No parsed output (stop_reason: {response.stop_reason})"
         return None, usage, error_desc
 

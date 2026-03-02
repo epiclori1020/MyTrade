@@ -243,20 +243,20 @@ Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 
 **Quelle:** @docs/03_architecture/error-handling.md
 
-- [ ] Circuit Breaker Pattern implementieren:
+- [x] Circuit Breaker Pattern implementieren:
   - 5 Failures hintereinander → 60s Pause (Open)
   - 1 Probe-Call nach 60s (Half-Open)
   - Erfolg → Closed / Fehler → 120s warten
   - Pro Provider (Finnhub, Alpha Vantage, Alpaca)
-- [ ] JSON Repair: `json_repair` Library für malformed Agent-Outputs
-- [ ] Partial Results: Wenn 1 Agent fehlschlägt:
+- [x] JSON Repair: `json_repair` Library für malformed Agent-Outputs
+- [x] Partial Results: Wenn 1 Agent fehlschlägt:
   - `analysis_runs.status` = `partial`
   - Vorhandene Outputs normal weiterverarbeiten
   - Confidence-Score automatisch reduzieren
   - Fehlender Agent in `error_log` dokumentieren
-- [ ] LLM Retry: 1x Retry mit verschärftem Prompt bei JSON-Fehler
-- [ ] Supabase Write Failure: 3x Retry, dann In-Memory-Queue
-- [ ] Alle Fehler in `error_log` Tabelle loggen (component, error_type, message, retry_count)
+- [x] LLM Retry: 1x Retry mit verschärftem Prompt bei JSON-Fehler
+- [x] Supabase Write Failure: 3x Retry, dann In-Memory-Queue
+- [x] Alle Fehler in `error_log` Tabelle loggen (component, error_type, message, retry_count)
 
 ### Step 11: Kill-Switch + Budget-Fallback
 

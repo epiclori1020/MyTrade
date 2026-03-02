@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.services.exceptions import (
+    CircuitBreakerOpenError,
     DataProviderError,
     ProviderTimeoutError,
     ProviderUnavailableError,
@@ -70,4 +71,21 @@ class TestRetryWithBackoff:
         with pytest.raises(ValueError, match="parse error"):
             retry_with_backoff(fn, provider="test")
         fn.assert_called_once()
+        mock_sleep.assert_not_called()
+
+    @patch("src.services.retry.time.sleep")
+    def test_circuit_breaker_early_exit(self, mock_sleep):
+        """CircuitBreakerOpenError: on_error called once, no sleep, error re-raised immediately."""
+        error = CircuitBreakerOpenError("test-provider")
+        fn = MagicMock(side_effect=error)
+        on_error = MagicMock()
+
+        with pytest.raises(CircuitBreakerOpenError):
+            retry_with_backoff(fn, max_retries=3, provider="test-provider", on_error=on_error)
+
+        # Function called exactly once — no retries against a known-down provider
+        fn.assert_called_once()
+        # on_error called once for logging purposes
+        on_error.assert_called_once_with(error, 1)
+        # No sleep — circuit breaker exits immediately without waiting
         mock_sleep.assert_not_called()

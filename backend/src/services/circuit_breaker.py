@@ -40,6 +40,7 @@ class CircuitBreaker:
         self._state = "closed"
         self._failure_count = 0
         self._last_failure_time: float = 0.0
+        self._probe_in_flight = False
         self._lock = threading.Lock()
 
     def check(self) -> None:
@@ -57,6 +58,7 @@ class CircuitBreaker:
                 timeout = self._current_timeout()
                 if elapsed >= timeout:
                     self._state = "half_open"
+                    self._probe_in_flight = True
                     logger.info(
                         "Circuit breaker %s: open -> half_open (probe allowed)",
                         self.provider,
@@ -65,12 +67,14 @@ class CircuitBreaker:
                 raise CircuitBreakerOpenError(self.provider)
 
             # half_open: allow exactly one probe call
-            # (state stays half_open until record_success or record_failure)
+            if self._probe_in_flight:
+                raise CircuitBreakerOpenError(self.provider)
 
     def record_success(self) -> None:
         """Record a successful call. Reset failure count, close circuit."""
         with self._lock:
             if self._state == "half_open":
+                self._probe_in_flight = False
                 logger.info(
                     "Circuit breaker %s: half_open -> closed (probe succeeded)",
                     self.provider,
@@ -90,6 +94,7 @@ class CircuitBreaker:
 
             if self._state == "half_open":
                 # Probe failed — reopen with extended timeout
+                self._probe_in_flight = False
                 self._state = "open"
                 self._last_failure_time = time.monotonic()
                 logger.warning(
@@ -141,6 +146,7 @@ class CircuitBreaker:
                 "state": self._state,
                 "failure_count": self._failure_count,
                 "last_failure_time": self._last_failure_time,
+                "probe_in_flight": self._probe_in_flight,
             }
 
     def reset(self) -> None:
@@ -149,6 +155,7 @@ class CircuitBreaker:
             self._state = "closed"
             self._failure_count = 0
             self._last_failure_time = 0.0
+            self._probe_in_flight = False
 
 
 # --- Module-level singletons (like rate limiter instances) ---

@@ -129,6 +129,12 @@ class AlpacaPaperAdapter(BrokerAdapter):
         Uses retry_with_backoff() — read-only, safe to retry.
         Circuit breaker checked inside _fetch() so each retry attempt
         verifies the provider is still reachable.
+
+        Circuit breaker policy: record_success() on ANY HTTP response
+        (even 4xx/5xx — Alpaca is reachable). record_failure() only on
+        connection/timeout errors (RequestError). This differs from data
+        providers (Finnhub/AV) where 5xx = record_failure(), because
+        broker reachability is the critical signal for trade execution.
         """
         self._ensure_paper_mode()
 
@@ -144,7 +150,8 @@ class AlpacaPaperAdapter(BrokerAdapter):
                 alpaca_breaker.record_success()
                 return resp.json()
             except httpx.HTTPStatusError as exc:
-                alpaca_breaker.record_failure()
+                # HTTP response received = Alpaca is reachable
+                alpaca_breaker.record_success()
                 raise BrokerError(
                     "alpaca", f"HTTP {exc.response.status_code}", status_code=exc.response.status_code
                 ) from exc
@@ -178,6 +185,12 @@ class AlpacaPaperAdapter(BrokerAdapter):
         Uses retry_with_backoff() — read-only, safe to retry.
         Circuit breaker checked inside _fetch() so each retry attempt
         verifies the provider is still reachable.
+
+        Circuit breaker policy: record_success() on ANY HTTP response
+        (even 4xx/5xx — Alpaca is reachable). record_failure() only on
+        connection/timeout errors (RequestError). This differs from data
+        providers (Finnhub/AV) where 5xx = record_failure(), because
+        broker reachability is the critical signal for trade execution.
         """
         self._ensure_paper_mode()
 
@@ -193,7 +206,8 @@ class AlpacaPaperAdapter(BrokerAdapter):
                 alpaca_breaker.record_success()
                 return resp.json()
             except httpx.HTTPStatusError as exc:
-                alpaca_breaker.record_failure()
+                # HTTP response received = Alpaca is reachable
+                alpaca_breaker.record_success()
                 raise BrokerError(
                     "alpaca", f"HTTP {exc.response.status_code}", status_code=exc.response.status_code
                 ) from exc

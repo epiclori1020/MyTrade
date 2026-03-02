@@ -202,10 +202,21 @@ def run_fundamental_analysis(ticker: str, user_id: str) -> AnalysisResult:
     if error_message:
         update["error_log"] = [{"error": _sanitize_error_for_db(error_message), "timestamp": _now_utc_iso()}]
 
-    supabase_write_with_retry(
+    write_success = supabase_write_with_retry(
         lambda: admin.table("analysis_runs").update(update).eq("id", analysis_id).execute(),
         description=f"analysis_runs update for {analysis_id}",
     )
+
+    if not write_success:
+        return AnalysisResult(
+            ticker=ticker,
+            analysis_id=analysis_id,
+            status="failed",
+            fundamental_out=analysis_dict,
+            tokens_used=total_tokens,
+            cost_usd=cost,
+            error_message="Failed to update analysis run in DB",
+        )
 
     return AnalysisResult(
         ticker=ticker,

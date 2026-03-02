@@ -495,6 +495,7 @@ class TestGetState:
             "state": "closed",
             "failure_count": 0,
             "last_failure_time": 0.0,
+            "probe_in_flight": False,
         }
 
     @patch("src.services.circuit_breaker.log_error")
@@ -733,3 +734,60 @@ class TestLogErrorIntegration:
         second_call_args = mock_log_error.call_args_list[1][0]
         assert first_call_args[1] == "circuit_open"
         assert second_call_args[1] == "probe_failed"
+
+
+# ---------------------------------------------------------------------------
+# 16. Half-Open Probe Concurrency: only one probe allowed
+# ---------------------------------------------------------------------------
+
+
+class TestHalfOpenProbeConcurrency:
+    @patch("src.services.circuit_breaker.log_error")
+    def test_only_one_probe_allowed_in_half_open(self, mock_log_error):
+        """After the first check() transitions to half_open (probe in flight),
+        a second check() must raise CircuitBreakerOpenError."""
+        breaker = CircuitBreaker("test")
+
+        with patch(
+            "src.services.circuit_breaker.time.monotonic", return_value=1000.0
+        ):
+            _open_breaker(breaker)
+
+        # First check: transitions open -> half_open, probe_in_flight = True
+        with patch(
+            "src.services.circuit_breaker.time.monotonic",
+            return_value=1000.0 + OPEN_TIMEOUT,
+        ):
+            breaker.check()  # Must not raise — this is the probe
+
+        assert breaker.get_state()["state"] == "half_open"
+        assert breaker.get_state()["probe_in_flight"] is True
+
+        # Second check: probe already in flight — must raise
+        with pytest.raises(CircuitBreakerOpenError):
+            breaker.check()
+
+    @patch("src.services.circuit_breaker.log_error")
+    def test_probe_resets_after_record_success(self, mock_log_error):
+        """After record_success() clears probe_in_flight, a new probe is allowed
+        (after the breaker re-opens and times out again)."""
+        breaker = CircuitBreaker("test")
+
+        with patch(
+            "src.services.circuit_breaker.time.monotonic", return_value=1000.0
+        ):
+            _open_breaker(breaker)
+
+        with patch(
+            "src.services.circuit_breaker.time.monotonic",
+            return_value=1000.0 + OPEN_TIMEOUT,
+        ):
+            breaker.check()  # half_open, probe in flight
+
+        # Probe succeeds — resets probe_in_flight and closes circuit
+        breaker.record_success()
+        assert breaker.get_state()["state"] == "closed"
+        assert breaker.get_state()["probe_in_flight"] is False
+
+        # Circuit works normally again
+        breaker.check()  # closed — must not raise

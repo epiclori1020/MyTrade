@@ -16,7 +16,6 @@ import anthropic
 from pydantic import BaseModel
 
 from src.config import get_settings
-from src.services.error_logger import log_error
 from src.services.exceptions import AgentError
 from src.services.llm_json_repair import extract_raw_text, try_repair_json
 
@@ -136,7 +135,6 @@ def _attempt_extraction(
             repaired = try_repair_json(raw_text, RawClaimsOutput)
             if repaired is not None:
                 logger.info("JSON repair succeeded for claim_extractor (%s)", model)
-                log_error("claim_extractor", "json_repair", f"Repaired malformed JSON output ({model})")
                 claims = [claim.model_dump() for claim in repaired.claims]
                 return claims, usage, None
 

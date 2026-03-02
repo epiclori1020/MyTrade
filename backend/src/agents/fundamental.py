@@ -16,7 +16,6 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from src.config import get_settings
-from src.services.error_logger import log_error
 from src.services.exceptions import AgentError
 from src.services.llm_json_repair import extract_raw_text, try_repair_json
 
@@ -244,7 +243,6 @@ def call_fundamental_agent(
             repaired = try_repair_json(raw_text, FundamentalAnalysis)
             if repaired is not None:
                 logger.info("JSON repair succeeded for fundamental_analyst")
-                log_error("fundamental_analyst", "json_repair", "Repaired malformed JSON output (attempt 1)")
                 return repaired.model_dump(), total_usage
 
         # --- Attempt 2: Stricter prompt (1x retry) ---
@@ -275,7 +273,6 @@ def call_fundamental_agent(
             repaired2 = try_repair_json(raw_text2, FundamentalAnalysis)
             if repaired2 is not None:
                 logger.info("JSON repair succeeded for fundamental_analyst (attempt 2)")
-                log_error("fundamental_analyst", "json_repair", "Repaired malformed JSON output (attempt 2)")
                 return repaired2.model_dump(), total_usage
 
         # Both attempts + repairs failed

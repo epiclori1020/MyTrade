@@ -243,12 +243,11 @@ class TestCallFundamentalAgent:
 class TestCallFundamentalAgentJsonRepair:
     """Tests for the JSON repair + retry flows inside call_fundamental_agent."""
 
-    @patch("src.agents.fundamental.log_error")
     @patch("src.agents.fundamental.try_repair_json")
     @patch("src.agents.fundamental.extract_raw_text")
     @patch("src.agents.fundamental._get_client")
     def test_json_repair_succeeds_attempt1(
-        self, mock_get_client, mock_extract, mock_repair, mock_log_error
+        self, mock_get_client, mock_extract, mock_repair
     ):
         """Attempt 1 returns parsed_output=None, but JSON repair succeeds.
 
@@ -271,12 +270,11 @@ class TestCallFundamentalAgentJsonRepair:
         assert usage["input_tokens"] == 1500
         assert usage["output_tokens"] == 200
 
-    @patch("src.agents.fundamental.log_error")
     @patch("src.agents.fundamental.try_repair_json")
     @patch("src.agents.fundamental.extract_raw_text")
     @patch("src.agents.fundamental._get_client")
     def test_retry_succeeds_after_repair_fails(
-        self, mock_get_client, mock_extract, mock_repair, mock_log_error
+        self, mock_get_client, mock_extract, mock_repair
     ):
         """Attempt 1 parse fails, repair also fails, attempt 2 parse succeeds.
 
@@ -302,12 +300,11 @@ class TestCallFundamentalAgentJsonRepair:
         assert usage["input_tokens"] == 1500 + 1600
         assert usage["output_tokens"] == 200 + 2100
 
-    @patch("src.agents.fundamental.log_error")
     @patch("src.agents.fundamental.try_repair_json")
     @patch("src.agents.fundamental.extract_raw_text")
     @patch("src.agents.fundamental._get_client")
     def test_json_repair_succeeds_attempt2(
-        self, mock_get_client, mock_extract, mock_repair, mock_log_error
+        self, mock_get_client, mock_extract, mock_repair
     ):
         """Both parse attempts return None, but repair on attempt 2 succeeds.
 
@@ -332,12 +329,11 @@ class TestCallFundamentalAgentJsonRepair:
         assert usage["input_tokens"] == 1500 + 1600
         assert usage["output_tokens"] == 200 + 300
 
-    @patch("src.agents.fundamental.log_error")
     @patch("src.agents.fundamental.try_repair_json")
     @patch("src.agents.fundamental.extract_raw_text")
     @patch("src.agents.fundamental._get_client")
     def test_all_attempts_and_repairs_fail(
-        self, mock_get_client, mock_extract, mock_repair, mock_log_error
+        self, mock_get_client, mock_extract, mock_repair
     ):
         """Both parse attempts and both repair attempts return None.
 

@@ -313,12 +313,11 @@ class TestCallClaimExtractor:
 class TestAttemptExtractionJsonRepair:
     """Tests for the JSON repair path inside _attempt_extraction."""
 
-    @patch("src.agents.claim_extractor.log_error")
     @patch("src.agents.claim_extractor.try_repair_json")
     @patch("src.agents.claim_extractor.extract_raw_text")
     @patch("src.agents.claim_extractor._get_client")
     def test_json_repair_succeeds_in_attempt_extraction(
-        self, mock_get_client, mock_extract, mock_repair, mock_log_error
+        self, mock_get_client, mock_extract, mock_repair
     ):
         """Within _attempt_extraction, parsed_output=None but JSON repair succeeds.
 
@@ -346,12 +345,11 @@ class TestAttemptExtractionJsonRepair:
         assert len(claims) == 1
         assert usage["model_used"] == MODEL_HAIKU
 
-    @patch("src.agents.claim_extractor.log_error")
     @patch("src.agents.claim_extractor.try_repair_json")
     @patch("src.agents.claim_extractor.extract_raw_text")
     @patch("src.agents.claim_extractor._get_client")
     def test_json_repair_fails_in_attempt_extraction(
-        self, mock_get_client, mock_extract, mock_repair, mock_log_error
+        self, mock_get_client, mock_extract, mock_repair
     ):
         """Within _attempt_extraction, parsed_output=None and repair returns None.
 

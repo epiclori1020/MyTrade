@@ -153,14 +153,8 @@ class TestFailureAndQueue:
 
         # Queue two items: one will fail during flush, one will succeed
         for fn in (always_fail_fn, will_succeed_fn):
-            fn_copy = fn  # closure capture
-            # Bypass retries by forcing 3 failures for each
-            fn_copy.side_effect = (
-                [RuntimeError("DB down")] * 3
-                if fn is always_fail_fn
-                else [RuntimeError("DB down")] * 3
-            )
-            supabase_write_with_retry(fn_copy, description="queued item")
+            fn.side_effect = [RuntimeError("DB down")] * 3
+            supabase_write_with_retry(fn, description="queued item")
 
         assert get_queue_size() == 2
 
@@ -310,10 +304,11 @@ class TestBackoffAndLogging:
         ]
         assert len(overflow_calls) == 1
 
+    @patch("src.services.supabase_retry.logger")
     @patch("src.services.supabase_retry.log_error")
     @patch("src.services.supabase_retry.time.sleep")
-    def test_log_error_called_on_successful_flush(self, mock_sleep, mock_log_error):
-        """log_error is called with queue_flushed when queued items are successfully flushed."""
+    def test_logger_info_called_on_successful_flush(self, mock_sleep, mock_log_error, mock_logger):
+        """logger.info is called on successful flush; log_error is NOT called with queue_flushed."""
         # Queue one item
         fail_fn = MagicMock(side_effect=[RuntimeError("DB down")] * 3)
         supabase_write_with_retry(fail_fn, description="queued item")
@@ -324,12 +319,21 @@ class TestBackoffAndLogging:
         # Trigger flush via a new successful write
         trigger_fn = MagicMock()
         mock_log_error.reset_mock()
+        mock_logger.reset_mock()
         supabase_write_with_retry(trigger_fn, description="trigger")
 
-        flush_calls = [
-            c for c in mock_log_error.call_args_list if c.args[1] == "queue_flushed"
+        # logger.info must be called with flush message
+        info_calls = [
+            c for c in mock_logger.info.call_args_list
+            if "Flushed" in str(c)
         ]
-        assert len(flush_calls) == 1
+        assert len(info_calls) >= 1
+
+        # log_error must NOT be called with "queue_flushed"
+        flush_error_calls = [
+            c for c in mock_log_error.call_args_list if len(c.args) > 1 and c.args[1] == "queue_flushed"
+        ]
+        assert len(flush_error_calls) == 0
 
 
 # ---------------------------------------------------------------------------

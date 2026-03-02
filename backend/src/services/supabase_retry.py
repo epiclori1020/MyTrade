@@ -101,11 +101,6 @@ def _flush_queue() -> int:
 
     if flushed > 0:
         logger.info("Flushed %d queued writes (%d remaining)", flushed, len(remaining))
-        log_error(
-            "supabase_queue",
-            "queue_flushed",
-            f"Successfully flushed {flushed} queued writes",
-        )
     return flushed
 
 

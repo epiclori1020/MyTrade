@@ -17,7 +17,7 @@ Fehler sind in einem Multi-Agent-System nicht die Ausnahme, sondern der Normalfa
 | Data Collector | API Rate Limit (429) | Exponential Backoff: 2s → 4s → 8s. Max. 3 Retries. Danach: Fallback-Quelle. Wenn beide down: Cache + Warning |
 | Data Collector | API Down (500/503) | Fallback-Quelle sofort. Finnhub down → Alpha Vantage. Beide down → Cache + Warning |
 | LLM Agent | Anthropic API Timeout | Retry 1x mit 30s Timeout. Danach: `partial_result` mit Outputs der bereits fertigen Agenten. User-Notification |
-| LLM Agent | Malformed JSON Output | Retry 1x mit verschärftem Prompt. Danach: JSON-Repair-Versuch (`json_repair` Library). Danach: Fehler loggen, Agent überspringen |
+| LLM Agent | Malformed JSON Output | Retry 1x mit verschärftem Prompt. Danach: JSON-Repair-Versuch (`json_repair` Library). Danach: Fehler loggen, Agent überspringen [^1] |
 | LLM Agent | Halluzination erkannt | Verification Layer flaggt. Datenpunkt wird als DISPUTED markiert. Confidence -10 Punkte |
 | Broker API | Order Rejected | Fehler-Grund loggen. User-Notification mit Erklärung. Kein automatischer Retry für Orders |
 | Broker API | Connection Lost | 3 Reconnect-Versuche à 5s. Danach: Kill-Switch aktivieren. User-Alert via Push |
@@ -48,6 +48,10 @@ Wenn ein Agent fehlschlägt, läuft die Analyse trotzdem weiter:
 - Confidence-Score wird automatisch reduziert
 
 ---
+
+---
+
+[^1]: **Implementierung (Step 10):** JSON Repair wird VOR dem Retry versucht (nicht danach wie hier beschrieben). Begründung: Repair ist kostenlos (lokal), Retry kostet Token. Wenn Repair gelingt, wird ein LLM-Call gespart. Reihenfolge: `messages.parse()` → JSON Repair → Retry mit verschärftem Prompt → JSON Repair auf Retry → AgentError.
 
 ## Referenzen
 - Kill-Switch: @docs/05_risk/kill-switch.md

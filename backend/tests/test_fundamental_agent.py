@@ -143,6 +143,13 @@ class TestBuildUserPrompt:
 # --- LLM Call Tests ---
 
 
+def _make_repaired_model():
+    """Return a mock FundamentalAnalysis instance with a working model_dump()."""
+    mock_model = MagicMock(spec=FundamentalAnalysis)
+    mock_model.model_dump.return_value = SAMPLE_ANALYSIS_OUTPUT.model_dump()
+    return mock_model
+
+
 class TestCallFundamentalAgent:
     @patch("src.agents.fundamental._get_client")
     def test_success_returns_dict_and_usage(self, mock_get_client):
@@ -175,19 +182,32 @@ class TestCallFundamentalAgent:
         assert validated.score == 72
         assert len(validated.sources) == 1
 
+    @patch("src.agents.fundamental.try_repair_json")
+    @patch("src.agents.fundamental.extract_raw_text")
     @patch("src.agents.fundamental._get_client")
-    def test_raises_agent_error_on_none_parsed_output(self, mock_get_client):
+    def test_raises_agent_error_on_none_parsed_output(
+        self, mock_get_client, mock_extract, mock_repair
+    ):
+        """When both LLM attempts and both JSON repairs fail, AgentError is raised.
+
+        Tokens from both attempts (1500 each) must be accumulated in usage.
+        """
         mock_client = MagicMock()
         mock_get_client.return_value = mock_client
+        # Both attempts return parsed_output=None
         mock_client.messages.parse.return_value = _make_mock_response(
-            parsed_output=None, stop_reason="max_tokens"
+            parsed_output=None, stop_reason="max_tokens", input_tokens=1500, output_tokens=200
         )
+        # Repair also fails for both attempts
+        mock_extract.return_value = "malformed"
+        mock_repair.return_value = None
 
         with pytest.raises(AgentError) as exc_info:
             call_fundamental_agent("AAPL", SAMPLE_FUNDAMENTALS, SAMPLE_PRICE)
 
         assert exc_info.value.error_type == "parse_failed"
-        assert exc_info.value.usage["input_tokens"] == 1500
+        # Two LLM calls (attempt 1 + retry): 1500 + 1500 = 3000 input tokens
+        assert exc_info.value.usage["input_tokens"] == 3000
 
     @patch("src.agents.fundamental._get_client")
     def test_raises_agent_error_on_api_timeout(self, mock_get_client):
@@ -218,6 +238,128 @@ class TestCallFundamentalAgent:
             call_fundamental_agent("AAPL", SAMPLE_FUNDAMENTALS, SAMPLE_PRICE)
 
         assert exc_info.value.error_type == "api_error"
+
+
+class TestCallFundamentalAgentJsonRepair:
+    """Tests for the JSON repair + retry flows inside call_fundamental_agent."""
+
+    @patch("src.agents.fundamental.log_error")
+    @patch("src.agents.fundamental.try_repair_json")
+    @patch("src.agents.fundamental.extract_raw_text")
+    @patch("src.agents.fundamental._get_client")
+    def test_json_repair_succeeds_attempt1(
+        self, mock_get_client, mock_extract, mock_repair, mock_log_error
+    ):
+        """Attempt 1 returns parsed_output=None, but JSON repair succeeds.
+
+        Expect: success returned without a second LLM call.
+        """
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_client.messages.parse.return_value = _make_mock_response(
+            parsed_output=None, stop_reason="max_tokens", input_tokens=1500, output_tokens=200
+        )
+
+        mock_extract.return_value = '{"business_model": {}}'
+        mock_repair.return_value = _make_repaired_model()
+
+        result, usage = call_fundamental_agent("AAPL", SAMPLE_FUNDAMENTALS, SAMPLE_PRICE)
+
+        # Only one LLM call — repair saved us from a retry
+        mock_client.messages.parse.assert_called_once()
+        assert result["score"] == 72
+        assert usage["input_tokens"] == 1500
+        assert usage["output_tokens"] == 200
+
+    @patch("src.agents.fundamental.log_error")
+    @patch("src.agents.fundamental.try_repair_json")
+    @patch("src.agents.fundamental.extract_raw_text")
+    @patch("src.agents.fundamental._get_client")
+    def test_retry_succeeds_after_repair_fails(
+        self, mock_get_client, mock_extract, mock_repair, mock_log_error
+    ):
+        """Attempt 1 parse fails, repair also fails, attempt 2 parse succeeds.
+
+        Expect: usage accumulated from both attempts, result from attempt 2.
+        """
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        mock_client.messages.parse.side_effect = [
+            _make_mock_response(parsed_output=None, input_tokens=1500, output_tokens=200),
+            _make_mock_response(parsed_output=SAMPLE_ANALYSIS_OUTPUT, input_tokens=1600, output_tokens=2100),
+        ]
+
+        # Repair returns None (fails) on the first attempt
+        mock_extract.return_value = "malformed json"
+        mock_repair.return_value = None
+
+        result, usage = call_fundamental_agent("AAPL", SAMPLE_FUNDAMENTALS, SAMPLE_PRICE)
+
+        assert mock_client.messages.parse.call_count == 2
+        assert result["score"] == 72
+        # Tokens from both attempts must be accumulated
+        assert usage["input_tokens"] == 1500 + 1600
+        assert usage["output_tokens"] == 200 + 2100
+
+    @patch("src.agents.fundamental.log_error")
+    @patch("src.agents.fundamental.try_repair_json")
+    @patch("src.agents.fundamental.extract_raw_text")
+    @patch("src.agents.fundamental._get_client")
+    def test_json_repair_succeeds_attempt2(
+        self, mock_get_client, mock_extract, mock_repair, mock_log_error
+    ):
+        """Both parse attempts return None, but repair on attempt 2 succeeds.
+
+        Expect: success with usage accumulated from both LLM calls.
+        """
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        mock_client.messages.parse.side_effect = [
+            _make_mock_response(parsed_output=None, input_tokens=1500, output_tokens=200),
+            _make_mock_response(parsed_output=None, input_tokens=1600, output_tokens=300),
+        ]
+
+        # Repair fails on attempt 1, succeeds on attempt 2
+        mock_extract.return_value = '{"business_model": {}}'
+        mock_repair.side_effect = [None, _make_repaired_model()]
+
+        result, usage = call_fundamental_agent("AAPL", SAMPLE_FUNDAMENTALS, SAMPLE_PRICE)
+
+        assert mock_client.messages.parse.call_count == 2
+        assert result["score"] == 72
+        assert usage["input_tokens"] == 1500 + 1600
+        assert usage["output_tokens"] == 200 + 300
+
+    @patch("src.agents.fundamental.log_error")
+    @patch("src.agents.fundamental.try_repair_json")
+    @patch("src.agents.fundamental.extract_raw_text")
+    @patch("src.agents.fundamental._get_client")
+    def test_all_attempts_and_repairs_fail(
+        self, mock_get_client, mock_extract, mock_repair, mock_log_error
+    ):
+        """Both parse attempts and both repair attempts return None.
+
+        Expect: AgentError with error_type='parse_failed' and accumulated tokens.
+        """
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        mock_client.messages.parse.side_effect = [
+            _make_mock_response(parsed_output=None, input_tokens=1500, output_tokens=200),
+            _make_mock_response(parsed_output=None, input_tokens=1600, output_tokens=300),
+        ]
+
+        mock_extract.return_value = "malformed"
+        mock_repair.return_value = None
+
+        with pytest.raises(AgentError) as exc_info:
+            call_fundamental_agent("AAPL", SAMPLE_FUNDAMENTALS, SAMPLE_PRICE)
+
+        assert exc_info.value.error_type == "parse_failed"
+        assert exc_info.value.usage["input_tokens"] == 1500 + 1600
+        assert exc_info.value.usage["output_tokens"] == 200 + 300
 
 
 # --- Client Singleton Tests ---

@@ -18,6 +18,7 @@ from functools import lru_cache
 import httpx
 
 from src.config import get_settings
+from src.services.circuit_breaker import alpaca_breaker
 from src.services.broker_adapter import (
     AccountInfo,
     BrokerAdapter,
@@ -70,8 +71,13 @@ class AlpacaPaperAdapter(BrokerAdapter):
         IMPORTANT: No retry_with_backoff() — a retry could cause double
         order execution. On connection errors, BrokerError is raised and
         the trade is set to 'failed'. The user can then manually re-approve.
+
+        Circuit breaker: record_success() on ANY HTTP response (even 4xx
+        rejections — Alpaca is reachable). record_failure() only on
+        connection/timeout errors.
         """
         self._ensure_paper_mode()
+        alpaca_breaker.check()
 
         payload = {
             "symbol": order.ticker,
@@ -92,6 +98,7 @@ class AlpacaPaperAdapter(BrokerAdapter):
             )
             resp.raise_for_status()
             data = resp.json()
+            alpaca_breaker.record_success()
             return OrderResult(
                 success=True,
                 broker_order_id=data.get("id"),
@@ -99,6 +106,8 @@ class AlpacaPaperAdapter(BrokerAdapter):
                 executed_at=data.get("filled_at"),
             )
         except httpx.HTTPStatusError as exc:
+            # HTTP response received = Alpaca is reachable (business rejection)
+            alpaca_breaker.record_success()
             try:
                 error_body = exc.response.json() if exc.response.content else {}
             except Exception:
@@ -110,6 +119,7 @@ class AlpacaPaperAdapter(BrokerAdapter):
                 error_message=error_msg,
             )
         except httpx.RequestError as exc:
+            alpaca_breaker.record_failure()
             logger.error("Alpaca connection error: %s", exc)
             raise BrokerError("alpaca", "Connection failed") from exc
 
@@ -117,10 +127,13 @@ class AlpacaPaperAdapter(BrokerAdapter):
         """Get current positions from Alpaca Paper account.
 
         Uses retry_with_backoff() — read-only, safe to retry.
+        Circuit breaker checked inside _fetch() so each retry attempt
+        verifies the provider is still reachable.
         """
         self._ensure_paper_mode()
 
         def _fetch():
+            alpaca_breaker.check()
             try:
                 resp = httpx.get(
                     f"{self._base_url}/v2/positions",
@@ -128,12 +141,15 @@ class AlpacaPaperAdapter(BrokerAdapter):
                     timeout=10.0,
                 )
                 resp.raise_for_status()
+                alpaca_breaker.record_success()
                 return resp.json()
             except httpx.HTTPStatusError as exc:
+                alpaca_breaker.record_failure()
                 raise BrokerError(
                     "alpaca", f"HTTP {exc.response.status_code}", status_code=exc.response.status_code
                 ) from exc
             except httpx.RequestError as exc:
+                alpaca_breaker.record_failure()
                 raise BrokerError("alpaca", "Connection failed") from exc
 
         data = retry_with_backoff(
@@ -160,10 +176,13 @@ class AlpacaPaperAdapter(BrokerAdapter):
         """Get Alpaca Paper account summary.
 
         Uses retry_with_backoff() — read-only, safe to retry.
+        Circuit breaker checked inside _fetch() so each retry attempt
+        verifies the provider is still reachable.
         """
         self._ensure_paper_mode()
 
         def _fetch():
+            alpaca_breaker.check()
             try:
                 resp = httpx.get(
                     f"{self._base_url}/v2/account",
@@ -171,12 +190,15 @@ class AlpacaPaperAdapter(BrokerAdapter):
                     timeout=10.0,
                 )
                 resp.raise_for_status()
+                alpaca_breaker.record_success()
                 return resp.json()
             except httpx.HTTPStatusError as exc:
+                alpaca_breaker.record_failure()
                 raise BrokerError(
                     "alpaca", f"HTTP {exc.response.status_code}", status_code=exc.response.status_code
                 ) from exc
             except httpx.RequestError as exc:
+                alpaca_breaker.record_failure()
                 raise BrokerError("alpaca", "Connection failed") from exc
 
         data = retry_with_backoff(

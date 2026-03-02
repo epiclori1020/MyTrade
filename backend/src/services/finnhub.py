@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from src.config import get_settings
+from src.services.circuit_breaker import finnhub_breaker
 from src.services.exceptions import (
     DataProviderError,
     ProviderTimeoutError,
@@ -39,10 +40,13 @@ class FinnhubClient:
         self._http.close()
 
     def _request(self, endpoint: str, params: dict | None = None) -> dict:
-        """Rate-limited GET request to Finnhub.
+        """Rate-limited GET request to Finnhub with circuit breaker.
 
         Raises typed DataProviderError subtypes on failure.
+        Circuit breaker check runs BEFORE rate limiter to avoid
+        consuming a rate-limiter slot for a known-down provider.
         """
+        finnhub_breaker.check()
         finnhub_limiter.acquire()
         request_params = {"token": self._api_key}
         if params:
@@ -50,19 +54,24 @@ class FinnhubClient:
         try:
             response = self._http.get(endpoint, params=request_params)
         except httpx.TimeoutException:
+            finnhub_breaker.record_failure()
             raise ProviderTimeoutError(PROVIDER)
         except httpx.HTTPError as exc:
+            finnhub_breaker.record_failure()
             raise ProviderUnavailableError(PROVIDER, f"HTTP error: {exc}")
 
         if response.status_code == 429:
+            # Rate limit is NOT a circuit breaker failure
             raise RateLimitError(PROVIDER)
         if response.status_code >= 500:
+            finnhub_breaker.record_failure()
             raise ProviderUnavailableError(
                 PROVIDER,
                 f"Server error: {response.status_code}",
                 status_code=response.status_code,
             )
         if response.status_code != 200:
+            finnhub_breaker.record_failure()
             raise DataProviderError(
                 PROVIDER,
                 f"Unexpected status {response.status_code}: {response.text[:200]}",
@@ -70,9 +79,13 @@ class FinnhubClient:
             )
 
         try:
-            return response.json()
+            data = response.json()
         except ValueError as exc:
+            finnhub_breaker.record_failure()
             raise DataProviderError(PROVIDER, f"Invalid JSON response: {exc}")
+
+        finnhub_breaker.record_success()
+        return data
 
     def get_profile(self, ticker: str) -> dict:
         """Fetch company profile from /stock/profile2.

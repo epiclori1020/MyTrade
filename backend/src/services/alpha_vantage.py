@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import httpx
 
 from src.config import get_settings
+from src.services.circuit_breaker import alpha_vantage_breaker
 from src.services.exceptions import (
     DataProviderError,
     ProviderTimeoutError,
@@ -40,11 +41,13 @@ class AlphaVantageClient:
         self._http.close()
 
     def _request(self, params: dict) -> dict:
-        """Rate-limited GET request to Alpha Vantage.
+        """Rate-limited GET request to Alpha Vantage with circuit breaker.
 
         Handles AV quirk: rate limits returned as HTTP 200 with "Note" or
         "Information" key instead of a proper 429 status.
+        Circuit breaker check runs BEFORE rate limiter.
         """
+        alpha_vantage_breaker.check()
         alpha_vantage_limiter.acquire()
         request_params = {"apikey": self._api_key}
         request_params.update(params)
@@ -52,19 +55,24 @@ class AlphaVantageClient:
         try:
             response = self._http.get("/query", params=request_params)
         except httpx.TimeoutException:
+            alpha_vantage_breaker.record_failure()
             raise ProviderTimeoutError(PROVIDER)
         except httpx.HTTPError as exc:
+            alpha_vantage_breaker.record_failure()
             raise ProviderUnavailableError(PROVIDER, f"HTTP error: {exc}")
 
         if response.status_code == 429:
+            # Rate limit is NOT a circuit breaker failure
             raise RateLimitError(PROVIDER)
         if response.status_code >= 500:
+            alpha_vantage_breaker.record_failure()
             raise ProviderUnavailableError(
                 PROVIDER,
                 f"Server error: {response.status_code}",
                 status_code=response.status_code,
             )
         if response.status_code != 200:
+            alpha_vantage_breaker.record_failure()
             raise DataProviderError(
                 PROVIDER,
                 f"Unexpected status {response.status_code}: {response.text[:200]}",
@@ -74,13 +82,17 @@ class AlphaVantageClient:
         try:
             data = response.json()
         except ValueError as exc:
+            alpha_vantage_breaker.record_failure()
             raise DataProviderError(PROVIDER, f"Invalid JSON response: {exc}")
 
         # AV rate limit quirk: HTTP 200 but body contains "Note" or "Information"
+        # record_success() must be AFTER this check — otherwise a rate-limited
+        # response would falsely reset the failure counter.
         if "Note" in data or "Information" in data:
             msg = data.get("Note") or data.get("Information", "Rate limit hit")
             raise RateLimitError(PROVIDER, msg)
 
+        alpha_vantage_breaker.record_success()
         return data
 
     def get_fundamentals(self, ticker: str) -> dict:

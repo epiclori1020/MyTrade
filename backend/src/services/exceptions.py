@@ -84,3 +84,20 @@ class BrokerError(DataProviderError):
 
     def __init__(self, broker: str, message: str, status_code: int | None = None):
         super().__init__(provider=broker, message=message, status_code=status_code)
+
+
+class CircuitBreakerOpenError(DataProviderError):
+    """Circuit breaker is open — provider temporarily blocked.
+
+    Inherits DataProviderError so retry_with_backoff() catches it.
+    retry_with_backoff() has an early-exit for this error type:
+    on_error is called once for logging, then immediately re-raised
+    (no further retries against a known-down provider).
+    """
+
+    def __init__(self, provider: str):
+        super().__init__(
+            provider=provider,
+            message=f"Circuit breaker open for {provider}",
+            status_code=None,
+        )

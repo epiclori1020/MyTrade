@@ -16,7 +16,9 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from src.config import get_settings
+from src.services.error_logger import log_error
 from src.services.exceptions import AgentError
+from src.services.llm_json_repair import extract_raw_text, try_repair_json
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +223,7 @@ def call_fundamental_agent(
     total_usage = {"input_tokens": 0, "output_tokens": 0}
 
     try:
+        # --- Attempt 1: Standard prompt ---
         response = client.messages.parse(
             model=MODEL_ID,
             max_tokens=MAX_OUTPUT_TOKENS,
@@ -232,15 +235,56 @@ def call_fundamental_agent(
         total_usage["input_tokens"] = response.usage.input_tokens
         total_usage["output_tokens"] = response.usage.output_tokens
 
-        if response.parsed_output is None:
-            raise AgentError(
-                agent_name="fundamental_analyst",
-                message=f"LLM returned no parsed output (stop_reason: {response.stop_reason})",
-                error_type="parse_failed",
-                usage=total_usage,
-            )
+        if response.parsed_output is not None:
+            return response.parsed_output.model_dump(), total_usage
 
-        return response.parsed_output.model_dump(), total_usage
+        # --- JSON Repair on Attempt 1 (free, local) ---
+        raw_text = extract_raw_text(response)
+        if raw_text:
+            repaired = try_repair_json(raw_text, FundamentalAnalysis)
+            if repaired is not None:
+                logger.info("JSON repair succeeded for fundamental_analyst")
+                log_error("fundamental_analyst", "json_repair", "Repaired malformed JSON output (attempt 1)")
+                return repaired.model_dump(), total_usage
+
+        # --- Attempt 2: Stricter prompt (1x retry) ---
+        logger.warning("Fundamental agent parse failed — retrying with stricter prompt")
+        retry_prompt = (
+            user_prompt
+            + "\n\n[WICHTIG] Dein vorheriger Output war nicht schema-konform. "
+            "Gib NUR valides JSON gemaess dem Schema zurueck. "
+            "Kein erklaerende Text vor oder nach dem JSON."
+        )
+
+        response2 = client.messages.parse(
+            model=MODEL_ID,
+            max_tokens=MAX_OUTPUT_TOKENS,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": retry_prompt}],
+            output_format=FundamentalAnalysis,
+        )
+        total_usage["input_tokens"] += response2.usage.input_tokens
+        total_usage["output_tokens"] += response2.usage.output_tokens
+
+        if response2.parsed_output is not None:
+            return response2.parsed_output.model_dump(), total_usage
+
+        # --- JSON Repair on Attempt 2 ---
+        raw_text2 = extract_raw_text(response2)
+        if raw_text2:
+            repaired2 = try_repair_json(raw_text2, FundamentalAnalysis)
+            if repaired2 is not None:
+                logger.info("JSON repair succeeded for fundamental_analyst (attempt 2)")
+                log_error("fundamental_analyst", "json_repair", "Repaired malformed JSON output (attempt 2)")
+                return repaired2.model_dump(), total_usage
+
+        # Both attempts + repairs failed
+        raise AgentError(
+            agent_name="fundamental_analyst",
+            message="Parse failed after retry and JSON repair",
+            error_type="parse_failed",
+            usage=total_usage,
+        )
 
     except AgentError:
         raise

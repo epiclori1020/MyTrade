@@ -19,6 +19,7 @@ from src.config import get_settings
 from src.services.error_logger import log_error
 from src.services.exceptions import AgentError, ConfigurationError, PreconditionError
 from src.services.supabase import get_supabase_admin
+from src.services.supabase_retry import supabase_write_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -240,19 +241,15 @@ def run_claim_extraction(analysis_id: str, user_id: str) -> ClaimExtractionResul
         processed_claims = _post_process_claims(raw_claims, analysis_id, ticker)
         claims_count = len(processed_claims)
 
-        # Batch INSERT into claims table
+        # Batch INSERT into claims table (with retry + queue fallback)
         if processed_claims:
-            try:
-                admin.table("claims").insert(processed_claims).execute()
-            except Exception as exc:
-                error_message = f"Failed to write claims to DB: {exc}"
-                logger.error("Failed to insert claims for %s: %s", analysis_id, exc)
-                log_error(
-                    component="claim_extractor",
-                    error_type="db_write_failed",
-                    message=str(exc),
-                    analysis_id=analysis_id,
-                )
+            success = supabase_write_with_retry(
+                lambda: admin.table("claims").insert(processed_claims).execute(),
+                description=f"claims insert for {analysis_id}",
+            )
+            if not success:
+                error_message = "Failed to write claims to DB"
+                logger.error("Failed to insert claims for %s (queued)", analysis_id)
                 # Claims were extracted but not persisted — report as failed
                 return ClaimExtractionResult(
                     analysis_id=analysis_id,

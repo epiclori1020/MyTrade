@@ -7,7 +7,7 @@ Phase A (Pre-Conditions): Checks before any tokens are consumed.
     Failures raise exceptions → no analysis_run created, no cost.
 
 Phase B (LLM Execution): Creates analysis_run, calls agent, logs cost.
-    Failures return AnalysisResult with status="failed" + cost tracking.
+    Failures return AnalysisResult with status="failed"/"partial" + cost tracking.
 """
 
 import logging
@@ -19,6 +19,7 @@ from src.config import get_settings
 from src.services.error_logger import log_error
 from src.services.exceptions import AgentError, ConfigurationError, PreconditionError
 from src.services.supabase import get_supabase_admin
+from src.services.supabase_retry import supabase_write_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class AnalysisResult:
 
     ticker: str
     analysis_id: str
-    status: str  # "completed" | "failed"
+    status: str  # "completed" | "failed" | "partial"
     fundamental_out: dict | None = None
     tokens_used: int = 0
     cost_usd: float = 0.0
@@ -187,7 +188,7 @@ def run_fundamental_analysis(ticker: str, user_id: str) -> AnalysisResult:
             logger.warning("Failed to log agent cost: %s", exc)
 
     # Step 8: Update analysis_run
-    status = "completed" if analysis_dict else "failed"
+    status = "completed" if analysis_dict else "partial"
     update = {
         "status": status,
         "completed_at": _now_utc_iso(),
@@ -196,13 +197,15 @@ def run_fundamental_analysis(ticker: str, user_id: str) -> AnalysisResult:
     }
     if analysis_dict:
         update["fundamental_out"] = analysis_dict
+    if status == "partial":
+        update["confidence"] = 0  # No trade proposal possible without fundamental analysis
     if error_message:
         update["error_log"] = [{"error": _sanitize_error_for_db(error_message), "timestamp": _now_utc_iso()}]
 
-    try:
-        admin.table("analysis_runs").update(update).eq("id", analysis_id).execute()
-    except Exception as exc:
-        logger.error("Failed to update analysis_run %s: %s", analysis_id, exc)
+    supabase_write_with_retry(
+        lambda: admin.table("analysis_runs").update(update).eq("id", analysis_id).execute(),
+        description=f"analysis_runs update for {analysis_id}",
+    )
 
     return AnalysisResult(
         ticker=ticker,

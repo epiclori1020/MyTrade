@@ -76,12 +76,16 @@ def activate_kill_switch(reason: str) -> dict:
         }
 
     now_iso = datetime.now(timezone.utc).isoformat()
-    admin.table("system_state").update({
+    resp = admin.table("system_state").update({
         "kill_switch_active": True,
         "kill_switch_reason": reason,
         "kill_switch_activated_at": now_iso,
         "updated_at": now_iso,
     }).eq("id", SYSTEM_STATE_ID).execute()
+
+    if not resp.data:
+        logger.error("Kill-switch activation failed — system_state row missing")
+        raise RuntimeError("Failed to persist kill-switch state")
 
     log_error("kill_switch", "activated", f"Kill-Switch activated: {reason}")
     logger.warning("Kill-Switch ACTIVATED: %s", reason)
@@ -101,12 +105,16 @@ def deactivate_kill_switch() -> dict:
     admin = get_supabase_admin()
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    admin.table("system_state").update({
+    resp = admin.table("system_state").update({
         "kill_switch_active": False,
         "kill_switch_reason": None,
         "kill_switch_activated_at": None,
         "updated_at": now_iso,
     }).eq("id", SYSTEM_STATE_ID).execute()
+
+    if not resp.data:
+        logger.error("Kill-switch deactivation failed — system_state row missing")
+        raise RuntimeError("Failed to persist kill-switch state")
 
     log_error("kill_switch", "deactivated", "Kill-Switch deactivated manually")
     logger.info("Kill-Switch deactivated")

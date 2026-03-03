@@ -73,8 +73,9 @@ def _mock_admin_table():
         )
 
         # system_state update: .update({}).eq("id", ...).execute()
+        # Default: returns the updated row (happy path — row exists)
         mock_table.update.return_value.eq.return_value.execute.return_value = (
-            SimpleNamespace(data=[])
+            SimpleNamespace(data=[{"id": "00000000-0000-0000-0000-000000000001"}])
         )
 
         # .select().eq().execute() (generic single eq)
@@ -269,6 +270,25 @@ class TestActivateKillSwitch:
         eq_call = ss_table.update.return_value.eq
         eq_call.assert_called_once_with("id", SYSTEM_STATE_ID)
 
+    @patch("src.services.kill_switch.log_error")
+    @patch("src.services.kill_switch.get_supabase_admin")
+    def test_raises_on_missing_system_state_row(self, mock_admin_fn, mock_log_error):
+        """Raises RuntimeError if update affects zero rows (missing seed row)."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+
+        ss_table = admin.table("system_state")
+        ss_table.select.return_value.limit.return_value.execute.return_value = (
+            SimpleNamespace(data=[_mock_system_state_row(kill_switch_active=False)])
+        )
+        # Update returns empty data → row not found
+        ss_table.update.return_value.eq.return_value.execute.return_value = (
+            SimpleNamespace(data=[])
+        )
+
+        with pytest.raises(RuntimeError, match="Failed to persist kill-switch state"):
+            activate_kill_switch("test_reason")
+
 
 # ---------------------------------------------------------------------------
 # 3. deactivate_kill_switch
@@ -317,6 +337,22 @@ class TestDeactivateKillSwitch:
 
         eq_call = ss_table.update.return_value.eq
         eq_call.assert_called_once_with("id", SYSTEM_STATE_ID)
+
+    @patch("src.services.kill_switch.log_error")
+    @patch("src.services.kill_switch.get_supabase_admin")
+    def test_raises_on_missing_system_state_row(self, mock_admin_fn, mock_log_error):
+        """Raises RuntimeError if update affects zero rows (missing seed row)."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+
+        ss_table = admin.table("system_state")
+        # Update returns empty data → row not found
+        ss_table.update.return_value.eq.return_value.execute.return_value = (
+            SimpleNamespace(data=[])
+        )
+
+        with pytest.raises(RuntimeError, match="Failed to persist kill-switch state"):
+            deactivate_kill_switch()
 
 
 # ---------------------------------------------------------------------------

@@ -90,9 +90,8 @@ def evaluate(request: Request) -> dict:
 
     Returns: {triggered, triggers: {drawdown: {...}, broker_cb: {...}, verification_rate: {...}}}
     """
-    user_id = request.state.user["id"]
-
     try:
+        user_id = request.state.user["id"]
         return evaluate_kill_switch_triggers(user_id)
     except Exception as exc:
         logger.error("Failed to evaluate kill-switch triggers: %s", exc, exc_info=True)

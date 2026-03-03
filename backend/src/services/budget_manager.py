@@ -175,7 +175,7 @@ def get_model_for_tier(requested_tier: str) -> ModelRouting:
             if degraded:
                 logger.warning(
                     "Budget degradation: %s -> %s (spend: $%.2f/$%.2f)",
-                    requested_tier, current_tier, spend.get(requested_tier, 0), tier_cap,
+                    requested_tier, current_tier, tier_spend, tier_cap,
                 )
             return ModelRouting(
                 model_id=TIER_MODELS[current_tier],

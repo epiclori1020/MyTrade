@@ -49,8 +49,8 @@ All colors as HSL values. Applied via CSS custom properties in `globals.css`.
 
 ## Typography
 
-- **Font stack:** Geist (sans) + Geist Mono (mono) — shipped via `geist` npm package
-- **Loading:** `next/font/local` with `variable` option, applied as CSS custom properties
+- **Font stack:** Geist (sans) + Geist Mono (mono) — via `next/font/google` (self-hosted at build time)
+- **Loading:** `next/font/google` with `variable` option, applied as CSS custom properties
 
 ### Type Scale
 

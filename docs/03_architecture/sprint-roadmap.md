@@ -303,29 +303,37 @@ Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 **Quelle:** @docs/03_architecture/system-overview.md, @docs/09_broker/security.md
 
 **Projekt-Setup:**
-- [ ] Next.js Projekt erstellen (App Router)
-- [ ] Tailwind CSS konfigurieren
-- [ ] shadcn/ui installieren (via shadcn MCP: `list_components` zuerst prüfen)
-- [ ] CSS Variables für Theming (Dark Mode Support)
-- [ ] `/frontend-design` Skill ausführen vor UI-Arbeit (Anti-AI-Slop)
+- [x] Next.js Projekt erstellen (App Router, Next.js 16 + Tailwind v4)
+- [x] Tailwind CSS konfigurieren (CSS-first @theme inline)
+- [x] shadcn/ui installieren (button, card, input, label, sonner, separator, skeleton, avatar, badge, sidebar)
+- [x] CSS Variables für Theming (Dark Mode Support) — MyTrade Design System
+- [x] `/frontend-design` Skill ausführen vor UI-Arbeit (Anti-AI-Slop)
+- [x] Design System Spec erstellt: `docs/06_frontend/design-system.md`
 
 **Auth Pages:**
-- [ ] Login-Seite (Email/Password)
-- [ ] Signup-Seite
-- [ ] Supabase Auth Client-Integration
-- [ ] Protected Routes (Redirect zu Login wenn nicht authentifiziert)
-- [ ] JWT Token Handling (Bearer Token für API-Calls)
+- [x] Login-Seite (Email/Password, deutsche Labels)
+- [x] Signup-Seite (mit Passwort-Bestätigung)
+- [x] Supabase Auth Client-Integration (@supabase/ssr, Browser + Server Client)
+- [x] Protected Routes (Middleware mit getUser(), Redirect zu Login)
+- [x] JWT Token Handling (Bearer Token für API-Calls via ApiClient)
+- [x] PKCE Auth Callback (`/auth/callback/route.ts`)
 
 **Layout + Navigation:**
-- [ ] App Shell: Sidebar (Desktop) / Bottom Nav (Mobile)
-- [ ] Navigation Items: Dashboard, Analyse, Settings
-- [ ] Responsive Breakpoints: Mobile (375px), Tablet (768px), Desktop (1280px)
-- [ ] Dark Mode Toggle (System-default + manuell)
+- [x] App Shell: Sidebar (Desktop) / Bottom Nav (Mobile)
+- [x] Navigation Items: Dashboard, Analyse, Einstellungen
+- [x] Responsive Breakpoints: Mobile (375px), Tablet (768px), Desktop (1280px)
+- [x] Dark Mode Toggle (System-default + manuell, next-themes)
 
 **API Client:**
-- [ ] Zentraler API-Client mit Base URL + Auth Headers
-- [ ] Error Handling: Toast-Notifications bei API-Fehlern
-- [ ] Loading States: Skeleton-Loader Pattern
+- [x] Zentraler API-Client mit Base URL + Auth Headers
+- [x] Error Handling: ApiError Klasse + Toast-Notifications Pattern
+- [x] Loading States: Skeleton-Loader Pattern (loading.tsx pro Route)
+- [x] Error Boundaries: error.tsx pro Route mit "Erneut versuchen"
+
+**Security:**
+- [x] Security-Review bestanden (12/12 Checks PASS)
+- [x] Keine Secrets in Frontend-Code
+- [x] docs/09_broker/security.md aktualisiert (NEXTAUTH_* entfernt, NEXT_PUBLIC_* dokumentiert)
 
 ### Step 13: Frontend Screens
 

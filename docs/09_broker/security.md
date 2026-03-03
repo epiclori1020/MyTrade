@@ -24,9 +24,10 @@ ALPACA_API_KEY=
 ALPACA_SECRET_KEY=
 ALPACA_PAPER_MODE=true          # MUSS true sein in Stufe 1
 
-# App
-NEXTAUTH_SECRET=
-NEXTAUTH_URL=
+# Frontend (NEXT_PUBLIC_* only — safe for browser)
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 ## Kritische Regeln

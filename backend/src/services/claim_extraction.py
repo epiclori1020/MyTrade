@@ -14,10 +14,15 @@ Phase B (LLM Execution): Calls claim extractor agent, post-processes claims,
 import logging
 from dataclasses import dataclass
 
-from src.agents.claim_extractor import MODEL_HAIKU, call_claim_extractor
+from src.agents.claim_extractor import call_claim_extractor
 from src.config import get_settings
 from src.services.error_logger import log_error
-from src.services.exceptions import AgentError, ConfigurationError, PreconditionError
+from src.services.exceptions import (
+    AgentError,
+    BudgetExhaustedError,
+    ConfigurationError,
+    PreconditionError,
+)
 from src.services.supabase import get_supabase_admin
 from src.services.supabase_retry import supabase_write_with_retry
 
@@ -198,12 +203,16 @@ def run_claim_extraction(analysis_id: str, user_id: str) -> ClaimExtractionResul
 
     # --- Phase B: LLM Execution (tokens will be consumed) ---
 
-    usage = {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "model_used": MODEL_HAIKU}
+    default_model = "claude-haiku-4-5"
+    usage = {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "model_used": default_model}
     raw_claims = None
     error_message = None
+    routing = None
 
     try:
-        raw_claims, usage = call_claim_extractor(ticker, fundamental_out)
+        raw_claims, usage, routing = call_claim_extractor(ticker, fundamental_out)
+    except BudgetExhaustedError:
+        raise  # Must propagate to route handler for 503 response
     except AgentError as exc:
         error_message = str(exc)
         if exc.usage:
@@ -211,7 +220,7 @@ def run_claim_extraction(analysis_id: str, user_id: str) -> ClaimExtractionResul
                 "input_tokens": exc.usage.get("input_tokens", 0),
                 "output_tokens": exc.usage.get("output_tokens", 0),
                 "cost_usd": exc.usage.get("cost_usd", 0.0),
-                "model_used": exc.usage.get("model_used", MODEL_HAIKU),
+                "model_used": exc.usage.get("model_used", default_model),
             }
         logger.error("Claim extraction error for %s: %s", analysis_id, exc)
         log_error(
@@ -265,24 +274,27 @@ def run_claim_extraction(analysis_id: str, user_id: str) -> ClaimExtractionResul
     output_tokens = usage.get("output_tokens", 0)
     total_tokens = input_tokens + output_tokens
     cost_usd = usage.get("cost_usd", 0.0)
-    model_used = usage.get("model_used", MODEL_HAIKU)
+    model_used = usage.get("model_used", default_model)
 
     # Step 8: Log to agent_cost_log (best-effort)
     if total_tokens > 0:
-        is_sonnet = model_used == "claude-sonnet-4-6"
+        tier = routing.tier if routing else ("standard" if "sonnet" in model_used else "light")
+        is_quality_fallback = routing is not None and model_used != routing.model_id
         try:
             admin.table("agent_cost_log").insert({
                 "analysis_id": analysis_id,
                 "agent_name": "claim_extractor",
                 "model": model_used,
-                "tier": "standard" if is_sonnet else "light",
+                "tier": tier,
                 "effort": "low",
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "cache_read_tokens": 0,
                 "cost_usd": cost_usd,
-                "fallback_from": MODEL_HAIKU if is_sonnet else None,
-                "degraded": False,
+                "fallback_from": default_model if is_quality_fallback else (
+                    routing.original_tier if routing and routing.degraded else None
+                ),
+                "degraded": routing.degraded if routing else False,
             }).execute()
         except Exception as exc:
             logger.warning("Failed to log agent cost: %s", exc)

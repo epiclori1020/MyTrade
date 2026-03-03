@@ -8,11 +8,15 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from src.services.exceptions import AgentError, ConfigurationError, PreconditionError
+from src.services.budget_manager import ModelRouting
+from src.services.exceptions import AgentError, BudgetExhaustedError, ConfigurationError, PreconditionError
 from src.services.fundamental_analysis import (
     AnalysisResult,
-    _calculate_cost,
     run_fundamental_analysis,
+)
+
+STANDARD_ROUTING = ModelRouting(
+    model_id="claude-sonnet-4-6", tier="standard", degraded=False, original_tier="standard"
 )
 
 FAKE_USER_ID = "test-user-id-123"
@@ -92,16 +96,6 @@ def _mock_admin_table():
     return admin
 
 
-class TestCostCalculation:
-    def test_correct_for_known_tokens(self):
-        # 1000 input × $3/MTok + 500 output × $15/MTok
-        cost = _calculate_cost(1000, 500)
-        assert abs(cost - 0.0105) < 0.0001
-
-    def test_zero_tokens_zero_cost(self):
-        assert _calculate_cost(0, 0) == 0.0
-
-
 class TestPhaseAPreConditions:
     """Tests for Phase A — failures that don't create analysis_run."""
 
@@ -159,7 +153,7 @@ class TestPhaseBOrchestration:
             data=[SAMPLE_PRICE_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1500, "output_tokens": 2000})
+        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1500, "output_tokens": 2000}, STANDARD_ROUTING)
 
         result = run_fundamental_analysis("AAPL", FAKE_USER_ID)
 
@@ -237,7 +231,7 @@ class TestPhaseBOrchestration:
             data=[SAMPLE_FUND_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1500, "output_tokens": 2000})
+        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1500, "output_tokens": 2000}, STANDARD_ROUTING)
 
         run_fundamental_analysis("AAPL", FAKE_USER_ID)
 
@@ -297,7 +291,7 @@ class TestPhaseBOrchestration:
             data=[SAMPLE_FUND_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1500, "output_tokens": 2000})
+        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1500, "output_tokens": 2000}, STANDARD_ROUTING)
 
         run_fundamental_analysis("AAPL", FAKE_USER_ID)
 
@@ -328,7 +322,7 @@ class TestPhaseBOrchestration:
             data=[SAMPLE_FUND_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1500, "output_tokens": 2000})
+        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1500, "output_tokens": 2000}, STANDARD_ROUTING)
 
         # Make cost log INSERT fail
         cost_table = admin.table("agent_cost_log")
@@ -356,7 +350,7 @@ class TestPhaseBOrchestration:
         )
         # stock_prices returns empty (default from _mock_admin_table)
 
-        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1000, "output_tokens": 1500})
+        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1000, "output_tokens": 1500}, STANDARD_ROUTING)
 
         result = run_fundamental_analysis("AAPL", FAKE_USER_ID)
 
@@ -448,7 +442,7 @@ class TestPhaseBOrchestration:
             data=[SAMPLE_FUND_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1500, "output_tokens": 2000})
+        mock_agent.return_value = (SAMPLE_AGENT_OUTPUT, {"input_tokens": 1500, "output_tokens": 2000}, STANDARD_ROUTING)
 
         # write_retry returns False (write was queued, not persisted)
         mock_write_retry.return_value = False
@@ -460,3 +454,27 @@ class TestPhaseBOrchestration:
         assert result.fundamental_out == SAMPLE_AGENT_OUTPUT
         assert result.tokens_used == 3500
         assert result.cost_usd > 0
+
+
+class TestBudgetExhaustedPropagation:
+    """BudgetExhaustedError must propagate through the orchestrator."""
+
+    @patch("src.services.fundamental_analysis.call_fundamental_agent")
+    @patch("src.services.fundamental_analysis.get_settings")
+    @patch("src.services.fundamental_analysis.get_supabase_admin")
+    def test_budget_exhausted_propagates(
+        self, mock_admin_fn, mock_settings, mock_agent
+    ):
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        mock_settings.return_value.anthropic_api_key = "test-key"
+
+        fund_table = admin.table("stock_fundamentals")
+        fund_table.select.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = SimpleNamespace(
+            data=[SAMPLE_FUND_ROW]
+        )
+
+        mock_agent.side_effect = BudgetExhaustedError("Monthly budget exhausted")
+
+        with pytest.raises(BudgetExhaustedError):
+            run_fundamental_analysis("AAPL", FAKE_USER_ID)

@@ -9,7 +9,7 @@ from src.dependencies.auth import authenticated_router
 from src.dependencies.rate_limit import limiter
 from src.routes.helpers import sanitize_error_message
 from src.services.claim_extraction import run_claim_extraction
-from src.services.exceptions import ConfigurationError, PreconditionError
+from src.services.exceptions import BudgetExhaustedError, ConfigurationError, PreconditionError
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,11 @@ def extract_claims(analysis_id: UUID, request: Request) -> dict:
         result = run_claim_extraction(str(analysis_id), user_id)
     except PreconditionError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except BudgetExhaustedError:
+        raise HTTPException(
+            status_code=503,
+            detail="Monthly API budget exhausted. Try again next month.",
+        )
     except ConfigurationError as exc:
         logger.error("Configuration error: %s", exc)
         raise HTTPException(

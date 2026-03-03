@@ -649,7 +649,90 @@ class TestModuleSingletons:
 
 
 # ---------------------------------------------------------------------------
-# 15. log_error Integration: state transitions call log_error() correctly
+# 15. Kill-Switch Bridge: Alpaca CB open -> activate kill-switch
+# ---------------------------------------------------------------------------
+
+
+class TestKillSwitchBridge:
+    """When Alpaca circuit breaker transitions to open, it must activate the kill-switch.
+    Non-Alpaca breakers (finnhub, alpha_vantage) must NOT trigger kill-switch."""
+
+    @patch("src.services.kill_switch.activate_kill_switch")
+    @patch("src.services.circuit_breaker.log_error")
+    def test_alpaca_closed_to_open_activates_kill_switch(
+        self, mock_log_error, mock_ks_activate
+    ):
+        """Alpaca CB closed->open must call activate_kill_switch('auto_broker_cb')."""
+        breaker = CircuitBreaker("alpaca")
+        _open_breaker(breaker)
+
+        mock_ks_activate.assert_called_once_with("auto_broker_cb")
+
+    @patch("src.services.circuit_breaker.log_error")
+    def test_alpaca_half_open_to_open_activates_kill_switch(self, mock_log_error):
+        """Alpaca CB half_open->open (probe failed) must also activate kill-switch."""
+        breaker = CircuitBreaker("alpaca")
+
+        with patch(
+            "src.services.circuit_breaker.time.monotonic", return_value=1000.0
+        ):
+            _open_breaker(breaker)
+
+        with patch(
+            "src.services.circuit_breaker.time.monotonic",
+            return_value=1000.0 + OPEN_TIMEOUT,
+        ):
+            breaker.check()  # half_open
+
+        with patch(
+            "src.services.kill_switch.activate_kill_switch"
+        ) as mock_ks, patch(
+            "src.services.circuit_breaker.time.monotonic", return_value=2000.0
+        ):
+            breaker.record_failure()  # half_open -> open again
+            mock_ks.assert_called_with("auto_broker_cb")
+
+    @patch("src.services.circuit_breaker.log_error")
+    def test_finnhub_cb_open_does_not_activate_kill_switch(self, mock_log_error):
+        """Finnhub CB open must NOT activate kill-switch (data provider, not broker)."""
+        breaker = CircuitBreaker("finnhub")
+
+        with patch(
+            "src.services.kill_switch.activate_kill_switch"
+        ) as mock_ks:
+            _open_breaker(breaker)
+            mock_ks.assert_not_called()
+
+    @patch("src.services.circuit_breaker.log_error")
+    def test_alpha_vantage_cb_open_does_not_activate_kill_switch(self, mock_log_error):
+        """Alpha Vantage CB open must NOT activate kill-switch (data provider, not broker)."""
+        breaker = CircuitBreaker("alpha_vantage")
+
+        with patch(
+            "src.services.kill_switch.activate_kill_switch"
+        ) as mock_ks:
+            _open_breaker(breaker)
+            mock_ks.assert_not_called()
+
+    @patch("src.services.circuit_breaker.log_error")
+    def test_kill_switch_failure_does_not_crash_cb(self, mock_log_error):
+        """If kill-switch activation fails, CB must still transition to open
+        without raising an exception."""
+        breaker = CircuitBreaker("alpaca")
+
+        with patch(
+            "src.services.kill_switch.activate_kill_switch",
+            side_effect=Exception("DB connection lost"),
+        ):
+            _open_breaker(breaker)
+
+        # CB must still be open despite kill-switch failure
+        assert breaker.get_state()["state"] == "open"
+
+
+# ---------------------------------------------------------------------------
+# 16. log_error Integration: state transitions call log_error() correctly
+# (was section 15, renumbered after Kill-Switch Bridge insertion)
 # ---------------------------------------------------------------------------
 
 
@@ -737,7 +820,7 @@ class TestLogErrorIntegration:
 
 
 # ---------------------------------------------------------------------------
-# 16. Half-Open Probe Concurrency: only one probe allowed
+# 17. Half-Open Probe Concurrency: only one probe allowed
 # ---------------------------------------------------------------------------
 
 

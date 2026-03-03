@@ -16,12 +16,11 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from src.config import get_settings
-from src.services.exceptions import AgentError
+from src.services.budget_manager import ModelRouting, get_model_for_tier
+from src.services.exceptions import AgentError, BudgetExhaustedError
 from src.services.llm_json_repair import extract_raw_text, try_repair_json
 
 logger = logging.getLogger(__name__)
-
-MODEL_ID = "claude-sonnet-4-6"
 
 # 4096 output tokens for ~1500-3000 token JSON response.
 # 30K budget from agents.md is input+output total, not output only.
@@ -208,15 +207,20 @@ def _build_user_prompt(
 
 def call_fundamental_agent(
     ticker: str, fundamentals: dict, current_price: dict | None
-) -> tuple[dict, dict]:
+) -> tuple[dict, dict, ModelRouting]:
     """Call the Fundamental Analyst LLM and return structured analysis.
 
     Returns:
-        (analysis_dict, usage_dict) where usage_dict has input_tokens and output_tokens.
+        (analysis_dict, usage_dict, routing) where usage_dict has input_tokens
+        and output_tokens, and routing has model_id/tier/degraded info.
 
     Raises:
         AgentError: On API errors, timeouts, or parse failures after retry.
+        BudgetExhaustedError: When monthly budget is exhausted.
     """
+    routing = get_model_for_tier("standard")
+    model_id = routing.model_id
+
     client = _get_client()
     user_prompt = _build_user_prompt(ticker, fundamentals, current_price)
     total_usage = {"input_tokens": 0, "output_tokens": 0}
@@ -224,7 +228,7 @@ def call_fundamental_agent(
     try:
         # --- Attempt 1: Standard prompt ---
         response = client.messages.parse(
-            model=MODEL_ID,
+            model=model_id,
             max_tokens=MAX_OUTPUT_TOKENS,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
@@ -235,7 +239,7 @@ def call_fundamental_agent(
         total_usage["output_tokens"] = response.usage.output_tokens
 
         if response.parsed_output is not None:
-            return response.parsed_output.model_dump(), total_usage
+            return response.parsed_output.model_dump(), total_usage, routing
 
         # --- JSON Repair on Attempt 1 (free, local) ---
         raw_text = extract_raw_text(response)
@@ -243,7 +247,7 @@ def call_fundamental_agent(
             repaired = try_repair_json(raw_text, FundamentalAnalysis)
             if repaired is not None:
                 logger.info("JSON repair succeeded for fundamental_analyst")
-                return repaired.model_dump(), total_usage
+                return repaired.model_dump(), total_usage, routing
 
         # --- Attempt 2: Stricter prompt (1x retry) ---
         logger.warning("Fundamental agent parse failed — retrying with stricter prompt")
@@ -255,7 +259,7 @@ def call_fundamental_agent(
         )
 
         response2 = client.messages.parse(
-            model=MODEL_ID,
+            model=model_id,
             max_tokens=MAX_OUTPUT_TOKENS,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": retry_prompt}],
@@ -265,7 +269,7 @@ def call_fundamental_agent(
         total_usage["output_tokens"] += response2.usage.output_tokens
 
         if response2.parsed_output is not None:
-            return response2.parsed_output.model_dump(), total_usage
+            return response2.parsed_output.model_dump(), total_usage, routing
 
         # --- JSON Repair on Attempt 2 ---
         raw_text2 = extract_raw_text(response2)
@@ -273,7 +277,7 @@ def call_fundamental_agent(
             repaired2 = try_repair_json(raw_text2, FundamentalAnalysis)
             if repaired2 is not None:
                 logger.info("JSON repair succeeded for fundamental_analyst (attempt 2)")
-                return repaired2.model_dump(), total_usage
+                return repaired2.model_dump(), total_usage, routing
 
         # Both attempts + repairs failed
         raise AgentError(
@@ -283,7 +287,7 @@ def call_fundamental_agent(
             usage=total_usage,
         )
 
-    except AgentError:
+    except (AgentError, BudgetExhaustedError):
         raise
 
     except anthropic.APITimeoutError as exc:

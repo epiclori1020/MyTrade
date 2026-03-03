@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.agents.claim_extractor import MODEL_HAIKU, MODEL_SONNET
+from src.services.budget_manager import ModelRouting
 from src.services.claim_extraction import (
     ClaimExtractionResult,
     _build_claim_id,
@@ -19,7 +19,18 @@ from src.services.claim_extraction import (
     _post_process_claims,
     run_claim_extraction,
 )
-from src.services.exceptions import AgentError, ConfigurationError, PreconditionError
+from src.services.exceptions import AgentError, BudgetExhaustedError, ConfigurationError, PreconditionError
+
+# Model ID constants (centralized in budget_manager, tests use literals for clarity)
+MODEL_HAIKU = "claude-haiku-4-5"
+MODEL_SONNET = "claude-sonnet-4-6"
+
+LIGHT_ROUTING = ModelRouting(
+    model_id=MODEL_HAIKU, tier="light", degraded=False, original_tier="light"
+)
+STANDARD_ROUTING = ModelRouting(
+    model_id=MODEL_SONNET, tier="standard", degraded=False, original_tier="standard"
+)
 
 FAKE_USER_ID = "test-user-id-123"
 FAKE_ANALYSIS_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -323,7 +334,7 @@ class TestPhaseBOrchestration:
             data=[SAMPLE_ANALYSIS_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE)
+        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE, LIGHT_ROUTING)
 
         result = run_claim_extraction(FAKE_ANALYSIS_ID, FAKE_USER_ID)
 
@@ -352,7 +363,7 @@ class TestPhaseBOrchestration:
             data=[SAMPLE_ANALYSIS_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE)
+        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE, LIGHT_ROUTING)
 
         run_claim_extraction(FAKE_ANALYSIS_ID, FAKE_USER_ID)
 
@@ -379,7 +390,7 @@ class TestPhaseBOrchestration:
             data=[SAMPLE_ANALYSIS_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE)
+        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE, LIGHT_ROUTING)
 
         run_claim_extraction(FAKE_ANALYSIS_ID, FAKE_USER_ID)
 
@@ -412,7 +423,7 @@ class TestPhaseBOrchestration:
         )
 
         sonnet_usage = {**SAMPLE_USAGE, "model_used": MODEL_SONNET}
-        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, sonnet_usage)
+        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, sonnet_usage, STANDARD_ROUTING)
 
         run_claim_extraction(FAKE_ANALYSIS_ID, FAKE_USER_ID)
 
@@ -420,7 +431,9 @@ class TestPhaseBOrchestration:
         cost_data = cost_table.insert.call_args[0][0]
         assert cost_data["model"] == MODEL_SONNET
         assert cost_data["tier"] == "standard"
-        assert cost_data["fallback_from"] == MODEL_HAIKU
+        # With routing-based tracking, Sonnet quality fallback returns
+        # STANDARD_ROUTING where model_used == routing.model_id → no fallback_from
+        assert cost_data["fallback_from"] is None
 
     @patch("src.services.claim_extraction.log_error")
     @patch("src.services.claim_extraction.call_claim_extractor")
@@ -501,7 +514,7 @@ class TestPhaseBOrchestration:
             data=[SAMPLE_ANALYSIS_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE)
+        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE, LIGHT_ROUTING)
 
         run_claim_extraction(FAKE_ANALYSIS_ID, FAKE_USER_ID)
 
@@ -526,7 +539,7 @@ class TestPhaseBOrchestration:
             data=[SAMPLE_ANALYSIS_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE)
+        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE, LIGHT_ROUTING)
 
         # Make cost log fail
         cost_table = admin.table("agent_cost_log")
@@ -581,7 +594,7 @@ class TestWriteRetryIntegration:
             data=[SAMPLE_ANALYSIS_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE)
+        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE, LIGHT_ROUTING)
 
         result = run_claim_extraction(FAKE_ANALYSIS_ID, FAKE_USER_ID)
 
@@ -609,7 +622,7 @@ class TestWriteRetryIntegration:
             data=[SAMPLE_ANALYSIS_ROW]
         )
 
-        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE)
+        mock_agent.return_value = (SAMPLE_RAW_CLAIMS, SAMPLE_USAGE, LIGHT_ROUTING)
 
         result = run_claim_extraction(FAKE_ANALYSIS_ID, FAKE_USER_ID)
 
@@ -619,3 +632,32 @@ class TestWriteRetryIntegration:
         # Tokens were consumed even though write failed
         assert result.tokens_used == 1300
         assert result.cost_usd > 0
+
+
+# ============================================================
+# BudgetExhaustedError Propagation Tests
+# ============================================================
+
+
+class TestBudgetExhaustedPropagation:
+    """BudgetExhaustedError from call_claim_extractor must propagate through
+    run_claim_extraction without being swallowed by the except Exception block."""
+
+    @patch("src.services.claim_extraction.call_claim_extractor")
+    @patch("src.services.claim_extraction.get_settings")
+    @patch("src.services.claim_extraction.get_supabase_admin")
+    def test_budget_exhausted_propagates(self, mock_admin_fn, mock_settings, mock_agent):
+        """BudgetExhaustedError must NOT be caught by the generic except Exception."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        mock_settings.return_value.anthropic_api_key = "test-key"
+
+        runs_table = admin.table("analysis_runs")
+        runs_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[SAMPLE_ANALYSIS_ROW]
+        )
+
+        mock_agent.side_effect = BudgetExhaustedError("Monthly API budget exhausted")
+
+        with pytest.raises(BudgetExhaustedError, match="Monthly API budget exhausted"):
+            run_claim_extraction(FAKE_ANALYSIS_ID, FAKE_USER_ID)

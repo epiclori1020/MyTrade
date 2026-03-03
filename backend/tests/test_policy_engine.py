@@ -76,6 +76,11 @@ def _mock_admin_table():
         chain_neq = chain_gte.neq.return_value
         chain_neq.execute.return_value = SimpleNamespace(data=[])
 
+        # .select("highwater_mark_value").limit(1).execute() (system_state)
+        mock_table.select.return_value.limit.return_value.execute.return_value = SimpleNamespace(
+            data=[{"highwater_mark_value": None}]
+        )
+
         tables[name] = mock_table
         return mock_table
 
@@ -122,12 +127,26 @@ class TestCalculateRemainingCashPct:
 
 
 class TestCalculatePortfolioDrawdown:
-    def test_returns_zero_in_mvp(self):
+    def test_returns_zero_no_highwater(self):
         holdings = [{"shares": 10, "current_price": 100.0}]
-        assert _calculate_portfolio_drawdown(holdings) == 0.0
+        assert _calculate_portfolio_drawdown(holdings, 0.0) == 0.0
 
     def test_empty_holdings(self):
-        assert _calculate_portfolio_drawdown([]) == 0.0
+        assert _calculate_portfolio_drawdown([], 10000.0) == 0.0
+
+    def test_calculates_drawdown_correctly(self):
+        # Highwater = 10000, current = 8000 → 20% drawdown
+        holdings = [{"shares": 80, "current_price": 100.0}]
+        assert _calculate_portfolio_drawdown(holdings, 10000.0) == pytest.approx(20.0)
+
+    def test_no_drawdown_when_above_highwater(self):
+        # Current value (11000) > highwater (10000) → 0% drawdown
+        holdings = [{"shares": 110, "current_price": 100.0}]
+        assert _calculate_portfolio_drawdown(holdings, 10000.0) == 0.0
+
+    def test_negative_highwater_returns_zero(self):
+        holdings = [{"shares": 10, "current_price": 100.0}]
+        assert _calculate_portfolio_drawdown(holdings, -1.0) == 0.0
 
 
 class TestIsWithinConstraints:
@@ -480,8 +499,9 @@ class TestGetEffectivePolicy:
 
 
 class TestRunPrePolicy:
+    @patch("src.services.policy_engine.is_kill_switch_active", return_value=False)
     @patch("src.services.policy_engine.get_effective_policy")
-    def test_valid_ticker_passes(self, mock_get_policy):
+    def test_valid_ticker_passes(self, mock_get_policy, _mock_ks):
         mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
 
         result = run_pre_policy("AAPL", FAKE_USER_ID)
@@ -489,8 +509,9 @@ class TestRunPrePolicy:
         assert result.passed is True
         assert result.violations == []
 
+    @patch("src.services.policy_engine.is_kill_switch_active", return_value=False)
     @patch("src.services.policy_engine.get_effective_policy")
-    def test_invalid_ticker_blocked(self, mock_get_policy):
+    def test_invalid_ticker_blocked(self, mock_get_policy, _mock_ks):
         mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
 
         result = run_pre_policy("BTC", FAKE_USER_ID)
@@ -500,8 +521,9 @@ class TestRunPrePolicy:
         assert result.violations[0].rule == "asset_universe"
         assert result.violations[0].severity == "blocking"
 
+    @patch("src.services.policy_engine.is_kill_switch_active", return_value=False)
     @patch("src.services.policy_engine.get_effective_policy")
-    def test_policy_snapshot_always_set(self, mock_get_policy):
+    def test_policy_snapshot_always_set(self, mock_get_policy, _mock_ks):
         mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
 
         result = run_pre_policy("AAPL", FAKE_USER_ID)
@@ -509,22 +531,48 @@ class TestRunPrePolicy:
         assert result.policy_snapshot is not None
         assert "max_drawdown_pct" in result.policy_snapshot
 
+    @patch("src.services.policy_engine.is_kill_switch_active", return_value=False)
     @patch("src.services.policy_engine.get_effective_policy")
-    def test_case_insensitive_ticker(self, mock_get_policy):
+    def test_case_insensitive_ticker(self, mock_get_policy, _mock_ks):
         mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
 
         result = run_pre_policy("aapl", FAKE_USER_ID)
 
         assert result.passed is True
 
+    @patch("src.services.policy_engine.is_kill_switch_active", return_value=False)
     @patch("src.services.policy_engine.get_effective_policy")
-    def test_multiple_invalid_tickers(self, mock_get_policy):
+    def test_multiple_invalid_tickers(self, mock_get_policy, _mock_ks):
         mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
 
         for ticker in ["BTC", "TQQQ", "DOGE", "SPAC_XYZ"]:
             result = run_pre_policy(ticker, FAKE_USER_ID)
             assert result.passed is False
             assert result.violations[0].rule == "asset_universe"
+
+    @patch("src.services.policy_engine.is_kill_switch_active")
+    @patch("src.services.policy_engine.get_effective_policy")
+    def test_kill_switch_active_blocks_pre_policy(self, mock_get_policy, mock_ks):
+        mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
+        mock_ks.return_value = True
+
+        result = run_pre_policy("AAPL", FAKE_USER_ID)
+
+        assert result.passed is False
+        rules = [v.rule for v in result.violations]
+        assert "kill_switch" in rules
+
+    @patch("src.services.policy_engine.is_kill_switch_active")
+    @patch("src.services.policy_engine.get_effective_policy")
+    def test_kill_switch_inactive_allows_pre_policy(self, mock_get_policy, mock_ks):
+        mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
+        mock_ks.return_value = False
+
+        result = run_pre_policy("AAPL", FAKE_USER_ID)
+
+        assert result.passed is True
+        rules = [v.rule for v in result.violations]
+        assert "kill_switch" not in rules
 
 
 # --- run_full_policy Tests ---

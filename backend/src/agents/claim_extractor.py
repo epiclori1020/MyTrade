@@ -16,20 +16,13 @@ import anthropic
 from pydantic import BaseModel
 
 from src.config import get_settings
-from src.services.exceptions import AgentError
+from src.services.budget_manager import ModelRouting, get_model_for_tier, get_pricing
+from src.services.exceptions import AgentError, BudgetExhaustedError
 from src.services.llm_json_repair import extract_raw_text, try_repair_json
 
 logger = logging.getLogger(__name__)
 
-MODEL_HAIKU = "claude-haiku-4-5"
-MODEL_SONNET = "claude-sonnet-4-6"
 MAX_OUTPUT_TOKENS = 4096
-
-# Pricing per token (as of 2026-03)
-HAIKU_INPUT_PRICE = 0.80 / 1_000_000  # $0.80/MTok
-HAIKU_OUTPUT_PRICE = 4.00 / 1_000_000  # $4.00/MTok
-SONNET_INPUT_PRICE = 3.00 / 1_000_000  # $3.00/MTok
-SONNET_OUTPUT_PRICE = 15.00 / 1_000_000  # $15.00/MTok
 
 
 # --- Pydantic Output Schema ---
@@ -94,9 +87,8 @@ def _calculate_attempt_cost(
     input_tokens: int, output_tokens: int, model: str
 ) -> float:
     """Calculate cost for a single attempt based on the model used."""
-    if model == MODEL_HAIKU:
-        return input_tokens * HAIKU_INPUT_PRICE + output_tokens * HAIKU_OUTPUT_PRICE
-    return input_tokens * SONNET_INPUT_PRICE + output_tokens * SONNET_OUTPUT_PRICE
+    pricing = get_pricing(model)
+    return input_tokens * pricing["input"] + output_tokens * pricing["output"]
 
 
 def _attempt_extraction(
@@ -148,16 +140,21 @@ def _attempt_extraction(
 def call_claim_extractor(
     ticker: str,
     fundamental_out: dict,
-) -> tuple[list[dict], dict]:
+) -> tuple[list[dict], dict, ModelRouting]:
     """Extract claims from fundamental analysis output using Haiku with Sonnet fallback.
 
     Returns:
-        (raw_claims_list, usage_dict) where usage_dict has:
+        (raw_claims_list, usage_dict, routing) where usage_dict has:
         input_tokens, output_tokens, cost_usd, model_used
 
     Raises:
         AgentError: On all extraction attempts failing, API errors, or timeouts.
+        BudgetExhaustedError: When monthly budget is exhausted.
     """
+    # Resolve model for light tier (Haiku default)
+    light_routing = get_model_for_tier("light")
+    light_model = light_routing.model_id
+
     client = _get_client()
     user_prompt = (
         f"Extrahiere alle verifizierbaren Claims aus folgendem "
@@ -167,27 +164,28 @@ def call_claim_extractor(
 
     total_usage = {"input_tokens": 0, "output_tokens": 0}
     total_cost = 0.0
-    last_model = MODEL_HAIKU  # Tracks which model was last attempted (for error reporting)
+    last_model = light_model
+    last_routing = light_routing
 
     try:
-        # --- Attempt 1: Haiku with original prompt ---
-        claims, usage, error_desc = _attempt_extraction(client, MODEL_HAIKU, user_prompt)
+        # --- Attempt 1: Light tier (Haiku) with original prompt ---
+        claims, usage, error_desc = _attempt_extraction(client, light_model, user_prompt)
         total_usage["input_tokens"] += usage["input_tokens"]
         total_usage["output_tokens"] += usage["output_tokens"]
         total_cost += _calculate_attempt_cost(
-            usage["input_tokens"], usage["output_tokens"], MODEL_HAIKU
+            usage["input_tokens"], usage["output_tokens"], light_model
         )
 
         if claims is not None:
             return claims, {
                 **total_usage,
                 "cost_usd": total_cost,
-                "model_used": MODEL_HAIKU,
-            }
+                "model_used": light_model,
+            }, light_routing
 
-        logger.warning("Haiku attempt 1 failed: %s — retrying with error context", error_desc)
+        logger.warning("Light tier attempt 1 failed: %s — retrying with error context", error_desc)
 
-        # --- Attempt 2: Haiku retry with error context ---
+        # --- Attempt 2: Light tier retry with error context ---
         retry_prompt = (
             user_prompt
             + "\n\n[RETRY] Dein vorheriger Output war nicht schema-konform. "
@@ -195,37 +193,41 @@ def call_claim_extractor(
             "Korrigiere und gib NUR valides JSON zurück."
         )
 
-        claims, usage, error_desc = _attempt_extraction(client, MODEL_HAIKU, retry_prompt)
+        claims, usage, error_desc = _attempt_extraction(client, light_model, retry_prompt)
         total_usage["input_tokens"] += usage["input_tokens"]
         total_usage["output_tokens"] += usage["output_tokens"]
         total_cost += _calculate_attempt_cost(
-            usage["input_tokens"], usage["output_tokens"], MODEL_HAIKU
+            usage["input_tokens"], usage["output_tokens"], light_model
         )
 
         if claims is not None:
             return claims, {
                 **total_usage,
                 "cost_usd": total_cost,
-                "model_used": MODEL_HAIKU,
-            }
+                "model_used": light_model,
+            }, light_routing
 
-        logger.warning("Haiku attempt 2 failed: %s — falling back to Sonnet", error_desc)
+        logger.warning("Light tier attempt 2 failed: %s — falling back to standard tier", error_desc)
 
-        # --- Attempt 3: Sonnet fallback with original prompt (clean input) ---
-        last_model = MODEL_SONNET
-        claims, usage, error_desc = _attempt_extraction(client, MODEL_SONNET, user_prompt)
+        # --- Attempt 3: Standard tier fallback with original prompt ---
+        standard_routing = get_model_for_tier("standard")
+        standard_model = standard_routing.model_id
+        last_model = standard_model
+        last_routing = standard_routing
+
+        claims, usage, error_desc = _attempt_extraction(client, standard_model, user_prompt)
         total_usage["input_tokens"] += usage["input_tokens"]
         total_usage["output_tokens"] += usage["output_tokens"]
         total_cost += _calculate_attempt_cost(
-            usage["input_tokens"], usage["output_tokens"], MODEL_SONNET
+            usage["input_tokens"], usage["output_tokens"], standard_model
         )
 
         if claims is not None:
             return claims, {
                 **total_usage,
                 "cost_usd": total_cost,
-                "model_used": MODEL_SONNET,
-            }
+                "model_used": standard_model,
+            }, standard_routing
 
         # All attempts failed
         raise AgentError(
@@ -235,7 +237,7 @@ def call_claim_extractor(
             usage={**total_usage, "cost_usd": total_cost, "model_used": last_model},
         )
 
-    except AgentError:
+    except (AgentError, BudgetExhaustedError):
         raise
 
     except anthropic.APITimeoutError as exc:

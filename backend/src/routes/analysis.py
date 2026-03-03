@@ -8,7 +8,7 @@ from src.constants import MVP_UNIVERSE, is_valid_ticker
 from src.dependencies.auth import authenticated_router
 from src.dependencies.rate_limit import limiter
 from src.routes.helpers import sanitize_error_message
-from src.services.exceptions import ConfigurationError, PreconditionError
+from src.services.exceptions import BudgetExhaustedError, ConfigurationError, PreconditionError
 from src.services.fundamental_analysis import run_fundamental_analysis
 
 logger = logging.getLogger(__name__)
@@ -41,6 +41,11 @@ def analyze_ticker(ticker: str, request: Request) -> dict:
         result = run_fundamental_analysis(ticker, user_id)
     except PreconditionError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except BudgetExhaustedError:
+        raise HTTPException(
+            status_code=503,
+            detail="Monthly API budget exhausted. Try again next month.",
+        )
     except ConfigurationError as exc:
         logger.error("Configuration error: %s", exc)
         raise HTTPException(

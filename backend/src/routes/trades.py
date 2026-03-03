@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 
 router = authenticated_router(prefix="/api/trades", tags=["trades"])
 
+VALID_TRADE_STATUSES = frozenset({
+    "proposed", "approved", "rejected", "executed", "failed", "expired",
+})
+
 
 class RejectBody(BaseModel):
     """Request body for trade rejection."""
@@ -148,6 +152,13 @@ def list_trades(
     Returns: {trades: [...]}
     """
     user_id = request.state.user["id"]
+
+    if status and status not in VALID_TRADE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status filter '{status}'. "
+            f"Allowed: {', '.join(sorted(VALID_TRADE_STATUSES))}",
+        )
 
     # Lazy expiration before listing
     expire_stale_trades()

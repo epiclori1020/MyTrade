@@ -248,7 +248,7 @@ class TestApproveTrade:
     @patch("src.services.trade_execution.get_broker_adapter")
     @patch("src.services.trade_execution.get_supabase_admin")
     @patch("src.services.trade_execution.expire_stale_trades")
-    def test_success_executed_at_set(self, mock_expire, mock_admin_fn, mock_broker_fn):
+    def test_success_executed_at_and_price_set(self, mock_expire, mock_admin_fn, mock_broker_fn):
         admin = _mock_admin_table()
         mock_admin_fn.return_value = admin
         trade_table = admin.table("trade_log")
@@ -267,7 +267,7 @@ class TestApproveTrade:
 
         approve_trade(FAKE_TRADE_ID, FAKE_USER_ID)
 
-        # The third update call should set status=executed and include executed_at
+        # The update call for status=executed should include executed_at and executed_price
         update_calls = trade_table.update.call_args_list
         executed_update = None
         for update_call in update_calls:
@@ -279,6 +279,42 @@ class TestApproveTrade:
         assert executed_update is not None
         assert "executed_at" in executed_update
         assert executed_update["executed_at"] == "2026-03-02T10:00:00Z"
+        assert "executed_price" in executed_update
+        assert executed_update["executed_price"] == 150.5
+
+    @patch("src.services.trade_execution.get_broker_adapter")
+    @patch("src.services.trade_execution.get_supabase_admin")
+    @patch("src.services.trade_execution.expire_stale_trades")
+    def test_executed_price_none_not_written_to_db(self, mock_expire, mock_admin_fn, mock_broker_fn):
+        """When executed_price is None, it must NOT be included in the DB update."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        trade_table = admin.table("trade_log")
+        trade_table.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
+            data=[_make_proposed_trade()]
+        )
+
+        broker = MagicMock()
+        broker.submit_order.return_value = OrderResult(
+            success=True,
+            broker_order_id="broker-ord-001",
+            executed_price=None,
+            executed_at="2026-03-02T10:00:00Z",
+        )
+        mock_broker_fn.return_value = broker
+
+        approve_trade(FAKE_TRADE_ID, FAKE_USER_ID)
+
+        update_calls = trade_table.update.call_args_list
+        executed_update = None
+        for update_call in update_calls:
+            update_data = update_call[0][0]
+            if update_data.get("status") == "executed":
+                executed_update = update_data
+                break
+
+        assert executed_update is not None
+        assert "executed_price" not in executed_update
 
     @patch("src.services.trade_execution.get_broker_adapter")
     @patch("src.services.trade_execution.get_supabase_admin")

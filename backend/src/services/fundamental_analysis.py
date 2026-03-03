@@ -16,16 +16,18 @@ from datetime import datetime, timezone
 
 from src.agents.fundamental import call_fundamental_agent
 from src.config import get_settings
+from src.services.budget_manager import get_pricing
 from src.services.error_logger import log_error
-from src.services.exceptions import AgentError, ConfigurationError, PreconditionError
+from src.services.exceptions import (
+    AgentError,
+    BudgetExhaustedError,
+    ConfigurationError,
+    PreconditionError,
+)
 from src.services.supabase import get_supabase_admin
 from src.services.supabase_retry import supabase_write_with_retry
 
 logger = logging.getLogger(__name__)
-
-# Claude Sonnet 4.6 pricing (as of 2026-02)
-SONNET_INPUT_PRICE_PER_TOKEN = 3.0 / 1_000_000  # $3/MTok
-SONNET_OUTPUT_PRICE_PER_TOKEN = 15.0 / 1_000_000  # $15/MTok
 
 
 @dataclass
@@ -39,13 +41,6 @@ class AnalysisResult:
     tokens_used: int = 0
     cost_usd: float = 0.0
     error_message: str | None = None
-
-
-def _calculate_cost(input_tokens: int, output_tokens: int) -> float:
-    return (
-        input_tokens * SONNET_INPUT_PRICE_PER_TOKEN
-        + output_tokens * SONNET_OUTPUT_PRICE_PER_TOKEN
-    )
 
 
 def _sanitize_error_for_db(error_message: str) -> str:
@@ -136,11 +131,14 @@ def run_fundamental_analysis(ticker: str, user_id: str) -> AnalysisResult:
     usage = {"input_tokens": 0, "output_tokens": 0}
     analysis_dict = None
     error_message = None
+    routing = None
 
     try:
-        analysis_dict, usage = call_fundamental_agent(
+        analysis_dict, usage, routing = call_fundamental_agent(
             ticker, fundamentals, current_price
         )
+    except BudgetExhaustedError:
+        raise  # Must propagate to route handler for 503 response
     except AgentError as exc:
         error_message = str(exc)
         if exc.usage:
@@ -166,7 +164,9 @@ def run_fundamental_analysis(ticker: str, user_id: str) -> AnalysisResult:
     input_tokens = usage.get("input_tokens", 0)
     output_tokens = usage.get("output_tokens", 0)
     total_tokens = input_tokens + output_tokens
-    cost = _calculate_cost(input_tokens, output_tokens)
+    model_id = routing.model_id if routing else "claude-sonnet-4-6"
+    pricing = get_pricing(model_id)
+    cost = input_tokens * pricing["input"] + output_tokens * pricing["output"]
 
     # Step 7: Log to agent_cost_log (best-effort)
     if total_tokens > 0:
@@ -174,15 +174,15 @@ def run_fundamental_analysis(ticker: str, user_id: str) -> AnalysisResult:
             admin.table("agent_cost_log").insert({
                 "analysis_id": analysis_id,
                 "agent_name": "fundamental_analyst",
-                "model": "claude-sonnet-4-6",
-                "tier": "standard",
+                "model": model_id,
+                "tier": routing.tier if routing else "standard",
                 "effort": "medium",
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "cache_read_tokens": 0,
                 "cost_usd": cost,
-                "fallback_from": None,
-                "degraded": False,
+                "fallback_from": routing.original_tier if routing and routing.degraded else None,
+                "degraded": routing.degraded if routing else False,
             }).execute()
         except Exception as exc:
             logger.warning("Failed to log agent cost: %s", exc)

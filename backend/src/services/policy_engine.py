@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 from src.constants import MVP_UNIVERSE
 from src.services.exceptions import ConfigurationError
+from src.services.kill_switch import is_kill_switch_active
 from src.services.supabase import get_supabase_admin
 
 logger = logging.getLogger(__name__)
@@ -325,9 +326,14 @@ def run_pre_policy(ticker: str, user_id: str) -> PolicyResult:
         ))
 
     # 2. Kill-Switch aktiv?
-    # MVP: Prüfe portfolio_holdings Drawdown wenn Portfolio-Daten existieren.
-    # Sonst: Skip (kein Portfolio = kein Drawdown).
-    # TODO: Dedizierter Kill-Switch-State in DB (Step 11+)
+    if is_kill_switch_active():
+        violations.append(PolicyViolation(
+            rule="kill_switch",
+            message="Kill-Switch is active — system is in Advisory-Only mode. No new trades allowed.",
+            severity="blocking",
+            current_value=True,
+            limit_value=False,
+        ))
 
     # 3. Maturity Stage
     # MVP: Stufe 1 = Paper Trading. Alle Analysen erlaubt.
@@ -419,7 +425,18 @@ def run_full_policy(trade_proposal: TradeProposal, user_id: str) -> PolicyResult
     # TODO: Account-Balance von Broker API lesen (Step 9 Alpaca/IBKR Integration)
 
     # --- Check 6: Drawdown kill-switch ---
-    drawdown = _calculate_portfolio_drawdown(holdings)
+    # Read highwater mark from system_state
+    try:
+        state_resp = admin.table("system_state").select("highwater_mark_value").limit(1).execute()
+        highwater = (
+            float(state_resp.data[0]["highwater_mark_value"])
+            if state_resp.data and state_resp.data[0].get("highwater_mark_value")
+            else 0.0
+        )
+    except Exception:
+        highwater = 0.0  # No highwater → no drawdown check (fail-open for full-policy)
+
+    drawdown = _calculate_portfolio_drawdown(holdings, highwater)
     if drawdown >= policy.max_drawdown_pct:
         violations.append(PolicyViolation(
             rule="drawdown_kill_switch",
@@ -583,10 +600,20 @@ def _calculate_remaining_cash_pct(
     return (remaining_cash / portfolio_value) * 100
 
 
-def _calculate_portfolio_drawdown(holdings: list[dict]) -> float:
-    """Calculate portfolio drawdown from highwater mark.
+def _calculate_portfolio_drawdown(holdings: list[dict], highwater: float) -> float:
+    """Calculate portfolio drawdown percentage from highwater mark.
 
-    MVP: Returns 0.0 — no highwater mark tracking yet.
-    TODO: Implement highwater mark in portfolio_holdings or separate table (Step 11)
+    Pure helper — no DB access. Takes highwater as parameter.
+    Returns 0.0 if no highwater or no current value (fail-open).
     """
-    return 0.0
+    if highwater <= 0:
+        return 0.0
+
+    current_value = _calculate_portfolio_value(holdings)
+    if current_value <= 0:
+        return 0.0
+
+    if current_value >= highwater:
+        return 0.0
+
+    return ((highwater - current_value) / highwater) * 100

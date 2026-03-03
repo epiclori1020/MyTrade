@@ -108,6 +108,13 @@ class CircuitBreaker:
                     f"Probe call failed for {self.provider}, "
                     f"extended timeout {EXTENDED_TIMEOUT}s",
                 )
+                # Bridge: Alpaca CB open -> Kill-Switch
+                if self.provider == "alpaca":
+                    try:
+                        from src.services.kill_switch import activate_kill_switch
+                        activate_kill_switch("auto_broker_cb")
+                    except Exception as exc:
+                        logger.warning("Failed to activate kill-switch from CB: %s", exc)
                 return
 
             if (
@@ -127,6 +134,13 @@ class CircuitBreaker:
                     f"Circuit breaker opened for {self.provider} "
                     f"after {self._failure_count} consecutive failures",
                 )
+                # Bridge: Alpaca CB open -> Kill-Switch
+                if self.provider == "alpaca":
+                    try:
+                        from src.services.kill_switch import activate_kill_switch
+                        activate_kill_switch("auto_broker_cb")
+                    except Exception as exc:
+                        logger.warning("Failed to activate kill-switch from CB: %s", exc)
 
     def _current_timeout(self) -> float:
         """Return the current timeout based on failure count.

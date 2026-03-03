@@ -263,36 +263,36 @@ Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 **Quelle:** @docs/05_risk/kill-switch.md, @docs/03_architecture/monitoring.md
 
 **Kill-Switch:**
-- [ ] Automatische Aktivierung bei:
+- [x] Automatische Aktivierung bei:
   1. Portfolio Drawdown ≥ 20%
   2. 5 aufeinanderfolgende Broker-API-Fehler
   3. Verification-Rate < 70%
   4. Manuell durch User
-- [ ] Kill-Switch Effekt: System wechselt in Advisory-Only (Stufe 0)
+- [x] Kill-Switch Effekt: System wechselt in Advisory-Only (Stufe 0)
   - Keine neuen Order-Vorschläge
   - Bestehende Positionen bleiben (kein Panik-Verkauf)
   - User-Notification
   - Manuelle Reaktivierung erforderlich
-- [ ] Kill-Switch Status in DB persistieren
+- [x] Kill-Switch Status in DB persistieren
 
 **Budget-Fallback (3-Tier):**
-- [ ] Budget-Tracking pro Tier in `agent_cost_log`:
+- [x] Budget-Tracking pro Tier in `agent_cost_log`:
   - Heavy (Opus): $30/Monat Hard Cap
   - Standard (Sonnet): $20/Monat Hard Cap
   - Light (Haiku): $5/Monat Hard Cap
   - Gesamt: $55/Monat Hard Cap
-- [ ] Degradierungs-Logik:
+- [x] Degradierungs-Logik:
   - Opus 100% → Devil's Advocate + Synthesizer degradieren zu Sonnet
   - Sonnet 100% → Analyse-Agents degradieren zu Haiku
   - Gesamt Hard Cap → Keine weiteren LLM-Calls bis Monatsende
-- [ ] `agent_cost_log.degraded = true` wenn Budget-Fallback aktiv
+- [x] `agent_cost_log.degraded = true` wenn Budget-Fallback aktiv
 
 #### Phase 3 — Definition of Done
-- [ ] Paper Order für AAPL wird via Alpaca Paper API ausgeführt
-- [ ] `trade_log` Eintrag mit Status `executed` existiert
-- [ ] Circuit Breaker stoppt Calls nach 5 Failures
-- [ ] Partial Result: Analyse läuft weiter wenn 1 Agent fehlschlägt
-- [ ] Kill-Switch aktiviert sich bei simuliertem 20% Drawdown
+- [x] Paper Order für AAPL wird via Alpaca Paper API ausgeführt
+- [x] `trade_log` Eintrag mit Status `executed` existiert
+- [x] Circuit Breaker stoppt Calls nach 5 Failures
+- [x] Partial Result: Analyse läuft weiter wenn 1 Agent fehlschlägt
+- [x] Kill-Switch aktiviert sich bei simuliertem 20% Drawdown
 
 ---
 

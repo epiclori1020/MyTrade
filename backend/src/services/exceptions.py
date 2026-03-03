@@ -86,6 +86,12 @@ class BrokerError(DataProviderError):
         super().__init__(provider=broker, message=message, status_code=status_code)
 
 
+class BudgetExhaustedError(Exception):
+    """Monthly API budget exhausted. Not a DataProviderError — no retry."""
+
+    pass
+
+
 class CircuitBreakerOpenError(DataProviderError):
     """Circuit breaker is open — provider temporarily blocked.
 

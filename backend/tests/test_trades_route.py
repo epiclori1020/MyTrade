@@ -297,6 +297,36 @@ class TestListTradesEndpoint:
         data = resp.json()
         assert data["trades"] == []
 
+    @patch("src.routes.trades.expire_stale_trades")
+    @patch("src.routes.trades.get_supabase_admin")
+    def test_200_with_valid_status_filter(
+        self, mock_get_admin, mock_expire, auth_client
+    ):
+        """A valid status filter (e.g. 'proposed') must be accepted and return 200."""
+        rows = [PROPOSED_ROW]
+        mock_get_admin.return_value = self._make_admin_mock(rows)
+
+        resp = auth_client.get("/api/trades?status=proposed")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "trades" in data
+
+    def test_400_invalid_status_filter(self, auth_client):
+        """An invalid status filter must return 400 with allowed values listed."""
+        resp = auth_client.get("/api/trades?status=invalid_status")
+
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert "invalid_status" in detail
+        assert "proposed" in detail  # At least one valid status listed
+
+    def test_400_another_invalid_status(self, auth_client):
+        """Different invalid status values must all return 400."""
+        resp = auth_client.get("/api/trades?status=deleted")
+
+        assert resp.status_code == 400
+
     def test_401_no_auth(self, auth_client):
         from src.dependencies.auth import get_current_user
         from src.main import app

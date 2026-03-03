@@ -135,11 +135,14 @@ def approve_trade(trade_id: str, user_id: str) -> dict:
 
     if result.success:
         executed_at = result.executed_at or datetime.now(timezone.utc).isoformat()
-        admin.table("trade_log").update({
+        update_data = {
             "status": "executed",
             "broker_order_id": result.broker_order_id,
             "executed_at": executed_at,
-        }).eq("id", trade_id).execute()
+        }
+        if result.executed_price is not None:
+            update_data["executed_price"] = float(result.executed_price)
+        admin.table("trade_log").update(update_data).eq("id", trade_id).execute()
         return {
             "trade_id": trade_id,
             "status": "executed",

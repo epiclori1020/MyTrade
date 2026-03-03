@@ -1,0 +1,191 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Radius */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  /* shadcn surface colors */
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* shadcn sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Charts */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* MyTrade semantic colors */
+  --color-verified: var(--verified);
+  --color-disputed: var(--disputed);
+  --color-unverified: var(--unverified);
+}
+
+/* ============================================================
+   MyTrade Design System — Light Mode
+   Ref: docs/06_frontend/design-system.md
+   ============================================================ */
+:root {
+  --radius: 0.5rem;
+
+  /* Surface */
+  --background: hsl(0 0% 99%);
+  --foreground: hsl(222 47% 11%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(222 47% 11%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(222 47% 11%);
+
+  /* Primary — deep navy */
+  --primary: hsl(222 47% 18%);
+  --primary-foreground: hsl(0 0% 100%);
+
+  /* Secondary */
+  --secondary: hsl(210 20% 96%);
+  --secondary-foreground: hsl(222 47% 18%);
+
+  /* Muted */
+  --muted: hsl(210 20% 96%);
+  --muted-foreground: hsl(220 13% 46%);
+
+  /* Accent — warm gold */
+  --accent: hsl(38 92% 50%);
+  --accent-foreground: hsl(222 47% 11%);
+
+  /* Destructive */
+  --destructive: hsl(0 72% 51%);
+
+  /* Borders & inputs */
+  --border: hsl(220 13% 91%);
+  --input: hsl(220 13% 91%);
+  --ring: hsl(222 47% 18%);
+
+  /* Sidebar — dark navy in both modes */
+  --sidebar: hsl(222 47% 12%);
+  --sidebar-foreground: hsl(210 20% 86%);
+  --sidebar-primary: hsl(38 92% 50%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(222 30% 18%);
+  --sidebar-accent-foreground: hsl(0 0% 100%);
+  --sidebar-border: hsl(222 30% 18%);
+  --sidebar-ring: hsl(38 92% 50%);
+
+  /* Semantic — verification */
+  --verified: hsl(152 60% 40%);
+  --disputed: hsl(0 72% 51%);
+  --unverified: hsl(45 95% 48%);
+
+  /* Charts */
+  --chart-1: hsl(222 47% 30%);
+  --chart-2: hsl(152 60% 40%);
+  --chart-3: hsl(38 92% 50%);
+  --chart-4: hsl(0 72% 51%);
+  --chart-5: hsl(210 20% 60%);
+}
+
+/* ============================================================
+   MyTrade Design System — Dark Mode
+   ============================================================ */
+.dark {
+  /* Surface */
+  --background: hsl(222 47% 6%);
+  --foreground: hsl(210 20% 93%);
+  --card: hsl(222 47% 9%);
+  --card-foreground: hsl(210 20% 93%);
+  --popover: hsl(222 47% 9%);
+  --popover-foreground: hsl(210 20% 93%);
+
+  /* Primary */
+  --primary: hsl(210 20% 86%);
+  --primary-foreground: hsl(222 47% 11%);
+
+  /* Secondary */
+  --secondary: hsl(222 30% 14%);
+  --secondary-foreground: hsl(210 20% 86%);
+
+  /* Muted */
+  --muted: hsl(222 30% 14%);
+  --muted-foreground: hsl(215 15% 55%);
+
+  /* Accent — warm gold */
+  --accent: hsl(38 92% 55%);
+  --accent-foreground: hsl(222 47% 11%);
+
+  /* Destructive */
+  --destructive: hsl(0 72% 60%);
+
+  /* Borders & inputs */
+  --border: hsl(222 30% 18%);
+  --input: hsl(222 30% 18%);
+  --ring: hsl(38 92% 55%);
+
+  /* Sidebar — dark navy */
+  --sidebar: hsl(222 47% 5%);
+  --sidebar-foreground: hsl(210 20% 86%);
+  --sidebar-primary: hsl(38 92% 55%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(222 30% 12%);
+  --sidebar-accent-foreground: hsl(0 0% 100%);
+  --sidebar-border: hsl(222 30% 12%);
+  --sidebar-ring: hsl(38 92% 55%);
+
+  /* Semantic — verification */
+  --verified: hsl(152 60% 50%);
+  --disputed: hsl(0 72% 60%);
+  --unverified: hsl(45 95% 53%);
+
+  /* Charts */
+  --chart-1: hsl(222 47% 50%);
+  --chart-2: hsl(152 60% 50%);
+  --chart-3: hsl(38 92% 55%);
+  --chart-4: hsl(0 72% 60%);
+  --chart-5: hsl(210 20% 70%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

@@ -34,7 +34,9 @@ class ApiClient {
       throw new ApiError(res.status, body.detail ?? "Request failed");
     }
 
-    return res.json();
+    const text = await res.text();
+    if (!text) return null as T;
+    return JSON.parse(text) as T;
   }
 
   get<T>(path: string) {

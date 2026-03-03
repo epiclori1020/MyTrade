@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get("next") ?? "/dashboard";
 
   // Validate the redirect target is a relative path (no open-redirect).
-  const safeNext = next.startsWith("/") ? next : "/dashboard";
+  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
 
   return NextResponse.redirect(`${origin}${safeNext}`);
 }

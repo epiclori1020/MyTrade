@@ -27,10 +27,11 @@ interface AppSidebarProps {
 export function AppSidebar({ userEmail }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
   const supabase = createClient();
 
   const avatarLetter = userEmail ? userEmail.charAt(0).toUpperCase() : "U";
+  const isDark = resolvedTheme === "dark";
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -39,7 +40,7 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
   }
 
   function toggleTheme() {
-    setTheme(theme === "dark" ? "light" : "dark");
+    setTheme(isDark ? "light" : "dark");
   }
 
   return (
@@ -111,10 +112,10 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={toggleTheme}
-              tooltip={theme === "dark" ? "Helles Design" : "Dunkles Design"}
+              tooltip={isDark ? "Helles Design" : "Dunkles Design"}
               className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
             >
-              {theme === "dark" ? (
+              {isDark ? (
                 <>
                   <Sun />
                   <span>Helles Design</span>

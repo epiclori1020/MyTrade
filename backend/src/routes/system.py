@@ -3,7 +3,7 @@
 import logging
 
 from fastapi import HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.dependencies.auth import authenticated_router
 from src.dependencies.rate_limit import limiter
@@ -23,7 +23,7 @@ router = authenticated_router(prefix="/api/system", tags=["system"])
 class ActivateBody(BaseModel):
     """Request body for Kill-Switch activation."""
 
-    reason: str = "manual"
+    reason: str = Field(default="manual", max_length=500)
 
 
 @router.get("/kill-switch")

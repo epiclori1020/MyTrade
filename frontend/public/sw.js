@@ -1,4 +1,5 @@
-const CACHE_VERSION = "v1";
+// IMPORTANT: Bump version on every production deploy to invalidate cached assets
+const CACHE_VERSION = "v2";
 const STATIC_CACHE = `mytrade-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `mytrade-dynamic-${CACHE_VERSION}`;
 

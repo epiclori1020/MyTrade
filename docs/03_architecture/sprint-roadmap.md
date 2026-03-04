@@ -496,11 +496,11 @@ Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 
 **Quelle:** @docs/03_architecture/monitoring.md, @docs/08_eval/metrics.md
 
-- [ ] `agent_cost_log` Tracking pro Agent-Call:
+- [x] `agent_cost_log` Tracking pro Agent-Call:
   - `agent_name`, `model`, `tier`, `input_tokens`, `output_tokens`, `cost_usd`
   - `fallback_from` (NULL = Default-Modell, sonst Quality-Fallback)
   - `degraded` (true = Budget-Fallback aktiv)
-- [ ] Monitoring-Widgets im Dashboard (oder separate Seite):
+- [x] Monitoring-Widgets im Dashboard (oder separate Seite):
   - Kosten MTD vs. Budget-Cap (Opus $30, Sonnet $20, Haiku $5, Gesamt $55)
   - Verification-Score (% verifizierte Claims über alle Analysen)
   - Agent-Health: Grün/Gelb/Rot pro Agent (basierend auf Error Rate)
@@ -512,60 +512,60 @@ Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 **Quelle:** @docs/00_build-brief/brief.md (Definition of Done)
 
 Teste den **vollständigen Flow** mit AAPL:
-- [ ] User klickt "Analyze AAPL"
-- [ ] Pre-Policy prüft: AAPL erlaubt
-- [ ] Data Collector holt Daten von Finnhub → `stock_fundamentals` in DB
-- [ ] Fundamental Analyst analysiert → `analysis_runs.fundamental_out` in DB
-- [ ] Claim Extractor extrahiert Claims → `claims` in DB (Schema-valid)
-- [ ] Verification prüft gegen Alpha Vantage → `verification_results` in DB
-- [ ] Full-Policy prüft Sizing
-- [ ] Trade Plan generiert → `trade_log` (Status: `proposed`)
-- [ ] User klickt "Approve" → Alpaca Paper Order → `trade_log` (Status: `executed`)
-- [ ] Alles in Supabase nachvollziehbar (Audit Trail)
+- [x] User klickt "Analyze AAPL"
+- [x] Pre-Policy prüft: AAPL erlaubt
+- [x] Data Collector holt Daten von Finnhub → `stock_fundamentals` in DB
+- [x] Fundamental Analyst analysiert → `analysis_runs.fundamental_out` in DB
+- [x] Claim Extractor extrahiert Claims → `claims` in DB (Schema-valid)
+- [x] Verification prüft gegen Alpha Vantage → `verification_results` in DB
+- [x] Full-Policy prüft Sizing
+- [x] Trade Plan generiert → `trade_log` (Status: `proposed`)
+- [x] User klickt "Approve" → Alpaca Paper Order → `trade_log` (Status: `executed`)
+- [x] Alles in Supabase nachvollziehbar (Audit Trail)
 
 **Negativ-Tests:**
-- [ ] Pre-Policy blockt verbotenen Ticker (z.B. BTC, TQQQ)
-- [ ] Full-Policy blockt zu große Position
-- [ ] Verification produziert min. 1 Claim mit Status != `verified`
-- [ ] Kill-Switch aktiviert bei simuliertem Drawdown
-- [ ] Circuit Breaker stoppt nach 5 API-Failures
+- [x] Pre-Policy blockt verbotenen Ticker (z.B. BTC, TQQQ)
+- [x] Full-Policy blockt zu große Position
+- [x] Verification produziert min. 1 Claim mit Status != `verified`
+- [x] Kill-Switch aktiviert bei simuliertem Drawdown
+- [x] Circuit Breaker stoppt nach 5 API-Failures
 
 ### Step 15c: Security Check
 
-- [ ] `/security-check` Skill ausführen
-- [ ] Prüfe: keine API Keys in Frontend-Code
-- [ ] Prüfe: RLS aktiv auf allen User-Tabellen
-- [ ] Prüfe: CORS nur erlaubte Origins
-- [ ] Prüfe: `ALPACA_PAPER_MODE=true` Validierung im Code
-- [ ] Prüfe: kein `service_role` Key im Frontend
-- [ ] Prüfe: `.env` in `.gitignore`
+- [x] `/security-check` Skill ausführen
+- [x] Prüfe: keine API Keys in Frontend-Code
+- [x] Prüfe: RLS aktiv auf allen User-Tabellen
+- [x] Prüfe: CORS nur erlaubte Origins
+- [x] Prüfe: `ALPACA_PAPER_MODE=true` Validierung im Code
+- [x] Prüfe: kein `service_role` Key im Frontend
+- [x] Prüfe: `.env` in `.gitignore`
 
 ### Step 15d: Deployment
 
-- [ ] Backend auf Railway deployen (EU Region):
+- [x] Backend auf Railway deployen (EU Region):
   - Environment Variables setzen (alle `.env` Werte)
   - Health-Check konfigurieren (`/health`)
   - Auto-Deploy von `main` Branch
-- [ ] Frontend auf Vercel deployen:
+- [x] Frontend auf Vercel deployen:
   - Environment Variables: `NEXT_PUBLIC_API_URL` (Railway URL)
   - Kein `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY`
   - Domain konfigurieren
-- [ ] CORS im Backend aktualisieren: Vercel-Domain hinzufügen
-- [ ] Smoke-Test: Login → Analyse starten → Ergebnis sehen → Approve → Paper Trade
+- [x] CORS im Backend aktualisieren: Vercel-Domain hinzufügen
+- [x] Smoke-Test: Login → Analyse starten → Ergebnis sehen → Approve → Paper Trade
 
 #### Phase 5 — Definition of Done (= MVP Complete)
 
 Die vollständige DoD aus @docs/00_build-brief/brief.md:
 
-- [ ] **End-to-End Run:** AAPL Analyse → Claims → Verification → Policy → Paper Trade → Supabase Log
-- [ ] **Policy Engine blockt:** Trade der gegen IPS verstößt wird rejected (nicht nur gewarnt)
-- [ ] **Verification funktioniert:** Min. 1 Claim mit Status != `verified`
-- [ ] **JSON-Outputs validiert:** Agent-Output matcht `claim-schema.json`
-- [ ] **Audit Trail vollständig:** analysis_run, claims, verification, trade_log in Supabase
-- [ ] **Security Hook:** Keine API Keys im Frontend
-- [ ] **PWA installierbar:** manifest.json + Service Worker
-- [ ] **Responsive:** 375px Viewport getestet
-- [ ] **Deployed:** Backend auf Railway, Frontend auf Vercel, DB auf Supabase EU
+- [x] **End-to-End Run:** AAPL Analyse → Claims → Verification → Policy → Paper Trade → Supabase Log
+- [x] **Policy Engine blockt:** Trade der gegen IPS verstößt wird rejected (nicht nur gewarnt)
+- [x] **Verification funktioniert:** Min. 1 Claim mit Status != `verified`
+- [x] **JSON-Outputs validiert:** Agent-Output matcht `claim-schema.json`
+- [x] **Audit Trail vollständig:** analysis_run, claims, verification, trade_log in Supabase
+- [x] **Security Hook:** Keine API Keys im Frontend
+- [x] **PWA installierbar:** manifest.json + Service Worker
+- [x] **Responsive:** 375px Viewport getestet
+- [x] **Deployed:** Backend auf Railway, Frontend auf Vercel, DB auf Supabase EU
 
 ---
 

@@ -294,6 +294,28 @@ export interface BudgetStatus {
   warnings: string[];
 }
 
+// --- System Metrics ---
+
+export interface MetricDetail {
+  rate_pct: number;
+  failed?: number;
+  verified?: number;
+  total: number;
+  detail: string;
+}
+
+export interface LatencyDetail {
+  value: number;
+  total_runs: number;
+  detail: string;
+}
+
+export interface SystemMetrics {
+  pipeline_error_rate: MetricDetail;
+  avg_latency_seconds: LatencyDetail;
+  verification_score: MetricDetail;
+}
+
 // --- Analysis Run (from DB) ---
 
 export interface AnalysisRun {

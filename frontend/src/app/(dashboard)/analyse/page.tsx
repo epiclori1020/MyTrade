@@ -38,7 +38,11 @@ function AnalyseContent() {
   const [loadedClaims, setLoadedClaims] = useState<ClaimWithVerification[]>(
     [],
   );
-  const [loadingExisting, setLoadingExisting] = useState(false);
+  // Initialize loading from URL: if ?id= exists, show skeleton until fetch completes.
+  // Avoids synchronous setState inside useEffect (react-hooks/set-state-in-effect).
+  const [loadingExisting, setLoadingExisting] = useState(
+    () => !!searchParams.get("id"),
+  );
 
   // Guard: only attempt the fetch once per mount — do not re-run when pipeline
   // state changes (startAnalysis calls reset() which clears pipeline state).
@@ -49,8 +53,6 @@ function AnalyseContent() {
     const id = searchParams.get("id");
     if (!id || state !== "idle" || fetchAttempted.current) return;
     fetchAttempted.current = true;
-
-    setLoadingExisting(true);
 
     Promise.all([
       api.get<AnalyzeResponse>(`/api/analyze/${id}`),
@@ -66,8 +68,7 @@ function AnalyseContent() {
       .finally(() => {
         setLoadingExisting(false);
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams, state]);
 
   // Effect 2: When pipeline completes, push ticker + id into the URL.
   useEffect(() => {

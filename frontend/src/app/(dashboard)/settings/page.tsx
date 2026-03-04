@@ -41,16 +41,28 @@ export default function SettingsPage() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const [data, presetsData] = await Promise.all([
+      const [settingsResult, presetsResult] = await Promise.allSettled([
         api.get<UserPolicySettings>("/api/policy/settings"),
         api.get<PresetsResponse>("/api/policy/presets"),
       ]);
+
+      if (settingsResult.status === "rejected") {
+        throw settingsResult.reason;
+      }
+
+      const data = settingsResult.value;
       setServerState(data);
       setMode(data.policy_mode);
       setPresetId(data.preset_id);
       setOverrides(data.policy_overrides);
       setCooldownUntil(data.cooldown_until);
-      setPresets(presetsData.presets as typeof PRESETS);
+
+      if (presetsResult.status === "fulfilled") {
+        setPresets(presetsResult.value.presets as typeof PRESETS);
+      } else {
+        toast.warning("Preset-Daten konnten nicht geladen werden. Lokaler Fallback aktiv.");
+      }
+
       setError(null);
     } catch (err) {
       setError(

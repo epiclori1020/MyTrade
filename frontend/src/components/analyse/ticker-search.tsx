@@ -23,11 +23,12 @@ import { cn } from "@/lib/utils";
 interface TickerSearchProps {
   onAnalyze: (ticker: string) => void;
   disabled?: boolean;
+  initialTicker?: string;
 }
 
-export function TickerSearch({ onAnalyze, disabled }: TickerSearchProps) {
+export function TickerSearch({ onAnalyze, disabled, initialTicker }: TickerSearchProps) {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(initialTicker ?? "");
 
   return (
     <div className="flex items-center gap-3">

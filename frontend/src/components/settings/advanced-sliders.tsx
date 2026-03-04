@@ -16,6 +16,7 @@ interface AdvancedSlidersProps {
   overrides: Record<string, number>;
   onModeChange: (mode: PolicyMode) => void;
   onOverrideChange: (key: string, value: number) => void;
+  presets?: typeof PRESETS;
 }
 
 export function AdvancedSliders({
@@ -24,7 +25,9 @@ export function AdvancedSliders({
   overrides,
   onModeChange,
   onOverrideChange,
+  presets,
 }: AdvancedSlidersProps) {
+  const effectivePresets = presets ?? PRESETS;
   const isAdvanced = mode === "ADVANCED";
   const [confirmed, setConfirmed] = useState(false);
 
@@ -35,7 +38,7 @@ export function AdvancedSliders({
 
   function getValue(key: string): number {
     if (isAdvanced && key in overrides) return overrides[key];
-    return PRESETS[preset][key as keyof (typeof PRESETS)["beginner"]] as number;
+    return effectivePresets[preset][key as keyof (typeof PRESETS)["beginner"]] as number;
   }
 
   // Compute core_pct from satellite_pct for display

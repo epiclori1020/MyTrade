@@ -12,6 +12,7 @@ from src.dependencies.rate_limit import limiter
 from src.services.exceptions import ConfigurationError
 from src.services.policy_engine import (
     CONSTRAINTS,
+    PRESETS,
     TradeProposal,
     get_effective_policy,
     run_full_policy,
@@ -36,6 +37,13 @@ def _violations_to_dicts(violations) -> list[dict]:
         }
         for v in violations
     ]
+
+
+@router.get("/presets")
+@limiter.limit("30/minute")
+def get_presets(request: Request) -> dict:
+    """Return preset definitions and constraint ranges for the settings UI."""
+    return {"presets": PRESETS, "constraints": CONSTRAINTS}
 
 
 @router.post("/pre-check/{ticker}")
@@ -238,9 +246,11 @@ def update_settings(request: Request, body: PolicySettingsUpdate) -> dict:
         old_preset = current["preset_id"] if current else "beginner"
         old_overrides = current.get("policy_overrides", {}) if current else {}
 
-        # Cooldown: if preset changed, set 24h cooldown
+        # Cooldown: if preset OR mode changed, set 24h cooldown (per spec)
         cooldown_until = None
-        if old_preset != body.preset_id:
+        preset_changed = old_preset != body.preset_id
+        mode_changed = body.policy_mode != old_mode
+        if preset_changed or mode_changed:
             cooldown_until = (
                 datetime.now(timezone.utc) + timedelta(hours=24)
             ).isoformat()

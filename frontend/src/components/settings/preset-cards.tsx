@@ -12,6 +12,7 @@ interface PresetCardsProps {
   currentPreset: PresetId;
   selectedPreset: PresetId;
   onSelect: (preset: PresetId) => void;
+  presets?: typeof PRESETS;
 }
 
 const RISK_COLORS = {
@@ -39,7 +40,9 @@ export function PresetCards({
   currentPreset,
   selectedPreset,
   onSelect,
+  presets,
 }: PresetCardsProps) {
+  const effectivePresets = presets ?? PRESETS;
   const presetIds: PresetId[] = ["beginner", "balanced", "active"];
 
   return (
@@ -116,9 +119,9 @@ export function PresetCards({
             )}
           </div>
           <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-            {Object.entries(PRESETS[selectedPreset]).map(([key, newVal]) => {
+            {Object.entries(effectivePresets[selectedPreset]).map(([key, newVal]) => {
               const oldVal =
-                PRESETS[currentPreset][key as keyof (typeof PRESETS)["beginner"]];
+                effectivePresets[currentPreset][key as keyof (typeof PRESETS)["beginner"]];
               if (oldVal === newVal) return null;
               const label = key.replace(/_/g, " ").replace(/pct$/, "%");
               return (

@@ -14,9 +14,11 @@ import { cn } from "@/lib/utils";
 
 interface ComparisonTableProps {
   activePreset: PresetId;
+  presets?: typeof PRESETS;
 }
 
-export function ComparisonTable({ activePreset }: ComparisonTableProps) {
+export function ComparisonTable({ activePreset, presets }: ComparisonTableProps) {
+  const effectivePresets = presets ?? PRESETS;
   const presetIds: PresetId[] = ["beginner", "balanced", "active"];
 
   return (
@@ -54,7 +56,7 @@ export function ComparisonTable({ activePreset }: ComparisonTableProps) {
                   id === activePreset && "bg-accent/5",
                 )}
               >
-                {PRESETS[id].core_pct}/{PRESETS[id].satellite_pct}
+                {effectivePresets[id].core_pct}/{effectivePresets[id].satellite_pct}
               </TableCell>
             ))}
           </TableRow>
@@ -65,7 +67,7 @@ export function ComparisonTable({ activePreset }: ComparisonTableProps) {
               <TableCell className="font-medium">{config.label}</TableCell>
               {presetIds.map((id) => {
                 const val =
-                  PRESETS[id][config.key as keyof (typeof PRESETS)["beginner"]];
+                  effectivePresets[id][config.key as keyof (typeof PRESETS)["beginner"]];
                 return (
                   <TableCell
                     key={id}

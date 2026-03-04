@@ -11,7 +11,8 @@ import { PresetCards } from "@/components/settings/preset-cards";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import type { PolicyMode, PresetId, UserPolicySettings } from "@/lib/types";
+import { PRESETS } from "@/lib/constants";
+import type { PolicyMode, PresetId, PresetsResponse, UserPolicySettings } from "@/lib/types";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -22,6 +23,9 @@ export default function SettingsPage() {
   const [serverState, setServerState] = useState<UserPolicySettings | null>(
     null,
   );
+
+  // Runtime presets fetched from backend (fallback to local constant)
+  const [presets, setPresets] = useState(PRESETS);
 
   // Local state (editable)
   const [mode, setMode] = useState<PolicyMode>("BEGINNER");
@@ -37,12 +41,16 @@ export default function SettingsPage() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const data = await api.get<UserPolicySettings>("/api/policy/settings");
+      const [data, presetsData] = await Promise.all([
+        api.get<UserPolicySettings>("/api/policy/settings"),
+        api.get<PresetsResponse>("/api/policy/presets"),
+      ]);
       setServerState(data);
       setMode(data.policy_mode);
       setPresetId(data.preset_id);
       setOverrides(data.policy_overrides);
       setCooldownUntil(data.cooldown_until);
+      setPresets(presetsData.presets as typeof PRESETS);
       setError(null);
     } catch (err) {
       setError(
@@ -145,8 +153,9 @@ export default function SettingsPage() {
           currentPreset={serverState?.preset_id ?? "beginner"}
           selectedPreset={presetId}
           onSelect={handlePresetSelect}
+          presets={presets}
         />
-        <ComparisonTable activePreset={presetId} />
+        <ComparisonTable activePreset={presetId} presets={presets} />
       </section>
 
       <section>
@@ -156,6 +165,7 @@ export default function SettingsPage() {
           overrides={overrides}
           onModeChange={handleModeChange}
           onOverrideChange={handleOverrideChange}
+          presets={presets}
         />
       </section>
 

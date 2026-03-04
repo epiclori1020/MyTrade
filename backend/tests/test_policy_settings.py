@@ -50,6 +50,32 @@ def _make_mock_admin(select_data=None, upsert_data=None, insert_data=None):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/policy/presets
+# ---------------------------------------------------------------------------
+
+
+class TestGetPresets:
+    def test_get_presets(self, auth_client):
+        """GET /api/policy/presets returns presets and constraints."""
+        resp = auth_client.get("/api/policy/presets")
+
+        assert resp.status_code == 200
+        data = resp.json()
+
+        # Presets: 3 keys
+        assert "presets" in data
+        assert set(data["presets"].keys()) == {"beginner", "balanced", "active"}
+
+        # Constraints: 9 keys
+        assert "constraints" in data
+        assert len(data["constraints"]) == 9
+        # Each constraint has min and max
+        for key, constraint in data["constraints"].items():
+            assert "min" in constraint
+            assert "max" in constraint
+
+
+# ---------------------------------------------------------------------------
 # GET /api/policy/settings
 # ---------------------------------------------------------------------------
 
@@ -275,6 +301,91 @@ class TestUpdateSettings:
 
         assert resp.status_code == 503
         assert "temporarily unavailable" in resp.json()["detail"]
+
+    @patch("src.routes.policy.get_supabase_admin")
+    def test_preset_to_advanced_sets_cooldown(self, mock_admin_fn, auth_client):
+        """PRESET→ADVANCED with same preset sets cooldown (mode changed)."""
+        admin = _make_mock_admin(select_data=[{
+            "policy_mode": "PRESET",
+            "preset_id": "balanced",
+            "policy_overrides": {},
+            "cooldown_until": None,
+        }])
+        mock_admin_fn.return_value = admin
+
+        resp = auth_client.put("/api/policy/settings", json={
+            "policy_mode": "ADVANCED",
+            "preset_id": "balanced",
+            "policy_overrides": {"satellite_pct": 35},
+        })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["policy_mode"] == "ADVANCED"
+        assert data["cooldown_until"] is not None
+
+    @patch("src.routes.policy.get_supabase_admin")
+    def test_advanced_to_advanced_no_cooldown(self, mock_admin_fn, auth_client):
+        """ADVANCED→ADVANCED (only override change) does not set cooldown."""
+        admin = _make_mock_admin(select_data=[{
+            "policy_mode": "ADVANCED",
+            "preset_id": "balanced",
+            "policy_overrides": {"satellite_pct": 30},
+            "cooldown_until": None,
+        }])
+        mock_admin_fn.return_value = admin
+
+        resp = auth_client.put("/api/policy/settings", json={
+            "policy_mode": "ADVANCED",
+            "preset_id": "balanced",
+            "policy_overrides": {"satellite_pct": 35},
+        })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["cooldown_until"] is None
+
+    @patch("src.routes.policy.get_supabase_admin")
+    def test_beginner_to_advanced_sets_cooldown(self, mock_admin_fn, auth_client):
+        """BEGINNER→ADVANCED sets cooldown (mode changed)."""
+        admin = _make_mock_admin(select_data=[{
+            "policy_mode": "BEGINNER",
+            "preset_id": "beginner",
+            "policy_overrides": {},
+            "cooldown_until": None,
+        }])
+        mock_admin_fn.return_value = admin
+
+        resp = auth_client.put("/api/policy/settings", json={
+            "policy_mode": "ADVANCED",
+            "preset_id": "beginner",
+            "policy_overrides": {"satellite_pct": 25},
+        })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["cooldown_until"] is not None
+
+    @patch("src.routes.policy.get_supabase_admin")
+    def test_advanced_to_preset_sets_cooldown(self, mock_admin_fn, auth_client):
+        """ADVANCED→PRESET (downgrade) sets cooldown (mode changed)."""
+        admin = _make_mock_admin(select_data=[{
+            "policy_mode": "ADVANCED",
+            "preset_id": "balanced",
+            "policy_overrides": {"satellite_pct": 35},
+            "cooldown_until": None,
+        }])
+        mock_admin_fn.return_value = admin
+
+        resp = auth_client.put("/api/policy/settings", json={
+            "policy_mode": "PRESET",
+            "preset_id": "balanced",
+            "policy_overrides": {},
+        })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["cooldown_until"] is not None
 
     @patch("src.routes.policy.get_supabase_admin")
     def test_new_user_defaults_for_old_values(self, mock_admin_fn, auth_client):

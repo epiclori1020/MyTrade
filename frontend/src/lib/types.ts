@@ -85,13 +85,9 @@ export interface AnalyzeResponse {
   ticker: string;
   status: string;
   fundamental_out: FundamentalOutput;
-  token_usage: { input_tokens: number; output_tokens: number };
-  model_routing: {
-    model_used: string;
-    tier: string;
-    degraded: boolean;
-    fallback_from: string | null;
-  };
+  tokens_used?: number;
+  cost_usd?: number;
+  error_message?: string | null;
 }
 
 export interface ExtractClaimsResponse {
@@ -172,6 +168,11 @@ export interface UserPolicySettings {
   preset_id: PresetId;
   policy_overrides: Record<string, number>;
   cooldown_until: string | null; // ISO-8601 or null
+}
+
+export interface PresetsResponse {
+  presets: Record<PresetId, Record<string, number>>;
+  constraints: Record<string, { min: number; max: number }>;
 }
 
 export interface EffectivePolicy {

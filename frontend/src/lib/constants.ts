@@ -13,6 +13,8 @@ export const MVP_UNIVERSE = [
   { ticker: "VWO", name: "Vanguard EM ETF", sector: "ETF" },
 ] as const;
 
+// FALLBACK — Runtime values fetched from GET /api/policy/presets.
+// Keep in sync with backend/src/services/policy_engine.py:35-72
 export const PRESETS = {
   beginner: {
     core_pct: 80,

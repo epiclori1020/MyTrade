@@ -50,7 +50,7 @@ export function RecentAnalyses({ data }: RecentAnalysesProps) {
               return (
                 <Link
                   key={run.id}
-                  href={`/analyse?ticker=${run.ticker}`}
+                  href={`/analyse?ticker=${run.ticker}&id=${run.id}`}
                   className="flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:bg-muted/50"
                 >
                   <div className="flex items-center gap-3">

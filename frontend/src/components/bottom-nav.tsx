@@ -10,7 +10,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 flex h-14 items-stretch border-t border-sidebar-border bg-sidebar md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-40 flex min-h-14 items-stretch border-t border-sidebar-border bg-sidebar pb-safe-area md:hidden"
       aria-label="Mobile Navigation"
     >
       {NAV_ITEMS.map(({ label, href, icon: Icon }) => {

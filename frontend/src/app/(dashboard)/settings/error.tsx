@@ -38,7 +38,7 @@ export default function SettingsError({ error, reset }: ErrorProps) {
           </p>
         </CardContent>
         <CardFooter>
-          <Button variant="outline" size="sm" onClick={reset}>
+          <Button variant="outline" className="min-h-[44px]" onClick={reset}>
             Erneut versuchen
           </Button>
         </CardFooter>

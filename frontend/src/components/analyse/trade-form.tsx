@@ -215,6 +215,7 @@ export function TradeForm({ ticker, analysisId }: TradeFormProps) {
             onClick={handlePolicyCheck}
             disabled={!shares || !price || checkingPolicy}
             variant="secondary"
+            className="min-h-[44px]"
           >
             {checkingPolicy && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -267,7 +268,7 @@ export function TradeForm({ ticker, analysisId }: TradeFormProps) {
           <Button
             onClick={handlePropose}
             disabled={proposing}
-            className="bg-accent text-accent-foreground hover:bg-accent/90"
+            className="min-h-[44px] bg-accent text-accent-foreground hover:bg-accent/90"
           >
             {proposing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Trade vorschlagen

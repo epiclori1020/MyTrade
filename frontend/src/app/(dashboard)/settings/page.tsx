@@ -143,7 +143,7 @@ export default function SettingsPage() {
         </h1>
         <div className="rounded-md border border-disputed/30 bg-disputed/5 p-4">
           <p className="text-sm text-disputed">{error}</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={loadSettings}>
+          <Button variant="outline" className="mt-2 min-h-[44px]" onClick={loadSettings}>
             Erneut versuchen
           </Button>
         </div>

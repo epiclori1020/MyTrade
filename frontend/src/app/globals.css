@@ -188,4 +188,32 @@
   body {
     @apply bg-background text-foreground;
   }
+  html {
+    touch-action: manipulation;
+  }
+}
+
+/* Safe area for standalone PWA (iPhone X+) */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe-area {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Slider thumb: enlarge touch zone on coarse pointers (mobile) */
+@media (pointer: coarse) {
+  [data-slot="slider-thumb"] {
+    min-width: 28px;
+    min-height: 28px;
+    position: relative;
+  }
+  [data-slot="slider-thumb"]::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 44px;
+    height: 44px;
+  }
 }

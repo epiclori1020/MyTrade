@@ -457,36 +457,36 @@ Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 
 **Quelle:** Architektur-Spec v2.1, Sektion 5.3
 
-- [ ] `manifest.json`:
+- [x] `manifest.json`:
   - App-Name: "MyTrade"
   - Theme-Color, Background-Color
   - Icons (192px, 512px)
   - Display: `standalone`
   - Start-URL: `/dashboard`
-- [ ] Service Worker:
+- [x] Service Worker:
   - Offline-Cache für Dashboard-Shell (App Shell Pattern)
   - Cache-Strategy: Network-First für API-Calls, Cache-First für Static Assets
-- [ ] Meta-Tags für iOS/Android:
+- [x] Meta-Tags für iOS/Android:
   - `<meta name="apple-mobile-web-app-capable">`
   - `<meta name="apple-mobile-web-app-status-bar-style">`
   - `<link rel="apple-touch-icon">`
-- [ ] Touch-Optimierung:
+- [x] Touch-Optimierung:
   - Alle interaktiven Elemente min. 44px Höhe
   - Swipe-Gesten vermeiden (Standard-Scroll)
   - Approve/Reject Buttons: Full-Width auf Mobile
-- [ ] Push-Notification Infrastruktur:
+- [x] Push-Notification Infrastruktur:
   - Service Worker registered
   - Push-Subscription-Endpoint vorbereiten (nicht im MVP senden, aber Setup ready)
 
 #### Phase 4 — Definition of Done
-- [ ] Login/Signup funktioniert
-- [ ] Analyse-Seite: AAPL Analyse starten → Investment Note + Claims + Trade Plan anzeigen
-- [ ] Settings-Seite: Preset wechseln → Policy in DB aktualisiert
-- [ ] Dashboard: Portfolio + letzte Analysen + Status-Widgets
-- [ ] PWA installierbar auf Mobile (manifest.json + Service Worker registriert)
-- [ ] Responsive Layout funktioniert auf 375px Viewport
-- [ ] Dark Mode Toggle funktioniert
-- [ ] Keine API Keys im Frontend-Code (Security Hook prüft)
+- [x] Login/Signup funktioniert
+- [x] Analyse-Seite: AAPL Analyse starten → Investment Note + Claims + Trade Plan anzeigen
+- [x] Settings-Seite: Preset wechseln → Policy in DB aktualisiert
+- [x] Dashboard: Portfolio + letzte Analysen + Status-Widgets
+- [x] PWA installierbar auf Mobile (manifest.json + Service Worker registriert)
+- [x] Responsive Layout funktioniert auf 375px Viewport
+- [x] Dark Mode Toggle funktioniert
+- [x] Keine API Keys im Frontend-Code (Security Hook prüft)
 
 ---
 

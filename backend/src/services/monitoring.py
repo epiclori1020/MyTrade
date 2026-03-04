@@ -14,6 +14,18 @@ from src.services.supabase import get_supabase_admin
 
 logger = logging.getLogger(__name__)
 
+_IN_BATCH_SIZE = 500
+
+
+def _batched_in_query(admin, table: str, select: str, column: str, values: list) -> list:
+    """Run .in_() queries in batches to avoid PostgREST URL length limits."""
+    results = []
+    for i in range(0, len(values), _IN_BATCH_SIZE):
+        batch = values[i : i + _IN_BATCH_SIZE]
+        resp = admin.table(table).select(select).in_(column, batch).execute()
+        results.extend(resp.data or [])
+    return results
+
 
 def get_system_metrics(user_id: str) -> dict:
     """Aggregated system metrics from analysis_runs (last 30 days).
@@ -67,26 +79,18 @@ def get_system_metrics(user_id: str) -> dict:
         total_claims = 0
 
         if analysis_ids:
-            # Get claims for these analyses
-            claims_resp = (
-                admin.table("claims")
-                .select("id, analysis_id")
-                .in_("analysis_id", analysis_ids)
-                .execute()
+            # Get claims for these analyses (batched for PostgREST URL limits)
+            claim_rows = _batched_in_query(
+                admin, "claims", "id, analysis_id", "analysis_id", analysis_ids
             )
-            claim_rows = claims_resp.data or []
             total_claims = len(claim_rows)
 
             if claim_rows:
                 claim_ids = [c["id"] for c in claim_rows]
-                # Get verification results
-                verif_resp = (
-                    admin.table("verification_results")
-                    .select("status")
-                    .in_("claim_id", claim_ids)
-                    .execute()
+                # Get verification results (batched)
+                verif_rows = _batched_in_query(
+                    admin, "verification_results", "status", "claim_id", claim_ids
                 )
-                verif_rows = verif_resp.data or []
                 verified_count = sum(
                     1 for v in verif_rows
                     if v.get("status") in ("verified", "consistent")

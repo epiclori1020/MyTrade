@@ -49,7 +49,7 @@ Covered by 50+ unit tests in `test_kill_switch.py`. Not re-tested manually.
 | Positive | 15 | 0 | 0 | 15 |
 | Negative | 5 | 0 | 0 | 5 |
 
-**Overall:** PENDING — to be filled after local E2E run.
+**Overall:** PENDING — requires manual execution with backend + frontend + Supabase running simultaneously.
 
 **Note:** This E2E test is manual. 645 backend + 26 frontend automated tests cover logic.
 The E2E verifies integration and UI display correctness.

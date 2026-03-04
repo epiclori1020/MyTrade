@@ -4,6 +4,7 @@ Mocks get_supabase_admin to avoid real DB calls. Covers:
 - Data present (happy path)
 - Empty DB (no runs)
 - DB error (fail-open returns zeros)
+- Batching for large .in_() queries
 """
 
 from unittest.mock import MagicMock, patch
@@ -14,13 +15,10 @@ USER_ID = "test-user-id-123"
 
 
 def _make_admin_mock(runs=None, claims=None, verifications=None):
-    """Build a chained supabase admin mock.
-
-    Returns the mock so individual table().select()... can be verified.
-    """
+    """Build supabase admin mock with name-based table routing."""
     admin = MagicMock()
 
-    # analysis_runs chain
+    # analysis_runs chain: .select().eq().gte().execute()
     runs_chain = MagicMock()
     runs_chain.select.return_value = runs_chain
     runs_chain.eq.return_value = runs_chain
@@ -29,7 +27,7 @@ def _make_admin_mock(runs=None, claims=None, verifications=None):
     runs_resp.data = runs
     runs_chain.execute.return_value = runs_resp
 
-    # claims chain
+    # claims chain: .select().in_().execute()
     claims_chain = MagicMock()
     claims_chain.select.return_value = claims_chain
     claims_chain.in_.return_value = claims_chain
@@ -37,7 +35,7 @@ def _make_admin_mock(runs=None, claims=None, verifications=None):
     claims_resp.data = claims
     claims_chain.execute.return_value = claims_resp
 
-    # verification_results chain
+    # verification_results chain: .select().in_().execute()
     verif_chain = MagicMock()
     verif_chain.select.return_value = verif_chain
     verif_chain.in_.return_value = verif_chain
@@ -45,16 +43,14 @@ def _make_admin_mock(runs=None, claims=None, verifications=None):
     verif_resp.data = verifications
     verif_chain.execute.return_value = verif_resp
 
-    # Route table() calls to the right chain
-    call_count = {"n": 0}
-    chains = [runs_chain, claims_chain, verif_chain]
+    # Name-based dispatch (robust regardless of call count/order)
+    table_map = {
+        "analysis_runs": runs_chain,
+        "claims": claims_chain,
+        "verification_results": verif_chain,
+    }
+    admin.table.side_effect = lambda name: table_map[name]
 
-    def table_side_effect(name):
-        idx = min(call_count["n"], len(chains) - 1)
-        call_count["n"] += 1
-        return chains[idx]
-
-    admin.table.side_effect = table_side_effect
     return admin
 
 
@@ -147,3 +143,39 @@ class TestGetSystemMetrics:
         assert result["pipeline_error_rate"]["total"] == 2
         # Avg latency: (120 + 45) / 2 = 82.5s
         assert result["avg_latency_seconds"]["value"] == 82.5
+
+    @patch("src.services.monitoring.get_supabase_admin")
+    @patch("src.services.monitoring._IN_BATCH_SIZE", 3)
+    def test_in_query_batched_for_large_lists(self, mock_admin):
+        """Verify .in_() is called in batches when list exceeds batch size."""
+        runs = [
+            {
+                "id": f"run-{i}",
+                "status": "completed",
+                "started_at": "2026-03-01T10:00:00+00:00",
+                "completed_at": "2026-03-01T10:01:00+00:00",
+            }
+            for i in range(5)
+        ]
+        claims = [
+            {"id": f"claim-{i}", "analysis_id": f"run-{i % 5}"} for i in range(7)
+        ]
+        verifications = [{"status": "verified"} for _ in range(7)]
+
+        admin = _make_admin_mock(runs, claims, verifications)
+        mock_admin.return_value = admin
+
+        result = get_system_metrics(USER_ID)
+
+        # 5 analysis_ids, batch_size=3 → ceil(5/3) = 2 claims batches
+        claims_calls = [
+            c for c in admin.table.call_args_list if c[0][0] == "claims"
+        ]
+        verif_calls = [
+            c for c in admin.table.call_args_list if c[0][0] == "verification_results"
+        ]
+        assert len(claims_calls) == 2  # ceil(5/3) = 2
+        # Mock returns full list per batch (no real filtering), so verification
+        # batches depend on accumulated claim_ids. Key assertion: >1 batch.
+        assert len(verif_calls) > 1
+        assert result["verification_score"]["verified"] > 0

@@ -71,8 +71,9 @@ export function PositionsTable() {
               </TableHeader>
               <TableBody>
                 {positions.map((pos) => {
-                  const pnl =
-                    ((pos.current_price - pos.avg_price) / pos.avg_price) * 100;
+                  const pnl = pos.avg_price > 0
+                    ? ((pos.current_price - pos.avg_price) / pos.avg_price) * 100
+                    : 0;
                   return (
                     <TableRow key={pos.ticker}>
                       <TableCell className="font-mono font-medium">

@@ -62,7 +62,7 @@ export function StatusWidgets() {
         {},
       );
       setEvalResult(result);
-      if (result.kill_switch_activated) {
+      if (result.triggered) {
         setKillSwitch((prev) =>
           prev ? { ...prev, active: true } : prev,
         );
@@ -231,28 +231,34 @@ export function StatusWidgets() {
         </CardHeader>
         <CardContent className="space-y-2">
           {evalResult ? (
-            <div className="space-y-1">
-              <div className="flex items-baseline gap-2">
-                <span
-                  className={cn(
-                    "font-mono text-lg tabular-nums",
-                    (evalResult.rate_pct ?? 0) > 85
-                      ? "text-verified"
-                      : (evalResult.rate_pct ?? 0) >= 70
-                        ? "text-unverified"
-                        : "text-disputed",
-                  )}
-                >
-                  {evalResult.rate_pct?.toFixed(0) ?? "—"}%
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  Verification Rate
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {evalResult.verified_count ?? 0} / {evalResult.total_claims ?? 0} Claims
-              </p>
-            </div>
+            (() => {
+              const vr = evalResult.triggers.verification_rate;
+              const rate = vr.rate_pct ?? 0;
+              return (
+                <div className="space-y-1">
+                  <div className="flex items-baseline gap-2">
+                    <span
+                      className={cn(
+                        "font-mono text-lg tabular-nums",
+                        rate > 85
+                          ? "text-verified"
+                          : rate >= 70
+                            ? "text-unverified"
+                            : "text-disputed",
+                      )}
+                    >
+                      {vr.rate_pct != null ? `${rate.toFixed(0)}%` : "—"}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      Verification Rate
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {vr.verified_count ?? 0} / {vr.total_claims ?? 0} Claims
+                  </p>
+                </div>
+              );
+            })()
           ) : (
             <p className="text-sm text-muted-foreground">Noch nicht geprüft</p>
           )}

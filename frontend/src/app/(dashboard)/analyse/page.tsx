@@ -121,7 +121,7 @@ function AnalyseContent() {
         />
       )}
 
-      {showComplete && effectiveResult && (
+      {showComplete && effectiveResult && effectiveResult.fundamental_out && (
         <>
           <InvestmentNote data={effectiveResult.fundamental_out} />
           <ClaimsList claims={effectiveClaims} />
@@ -145,7 +145,7 @@ function AnalyseContent() {
         </>
       )}
 
-      {state === "partial" && analysisResult && (
+      {state === "partial" && analysisResult && analysisResult.fundamental_out && (
         <>
           <InvestmentNote data={analysisResult.fundamental_out} />
           <Card className="border-unverified/40">

@@ -74,36 +74,48 @@ export interface PolicyViolation {
 }
 
 export interface CollectResponse {
-  ticker: string;
   status: string;
-  fundamentals_count: number;
+  ticker: string;
+  fundamentals: Record<string, unknown> | null;
   prices_count: number;
+  news: unknown[];
+  insider_trades: unknown[];
+  errors: string[];
 }
 
 export interface AnalyzeResponse {
   analysis_id: string;
   ticker: string;
   status: string;
-  fundamental_out: FundamentalOutput;
+  fundamental_out: FundamentalOutput | null;
   tokens_used?: number;
   cost_usd?: number;
   error_message?: string | null;
 }
 
 export interface ExtractClaimsResponse {
+  status: string;
   analysis_id: string;
   claims_count: number;
-  claims: ClaimRaw[];
+  claims: ClaimRaw[] | null;
+  tokens_used?: number;
+  cost_usd?: number;
+  error_message?: string | null;
 }
 
 export interface VerifyResponse {
+  status: string;
   analysis_id: string;
-  verified: number;
-  consistent: number;
-  unverified: number;
-  disputed: number;
-  manual_check: number;
-  total: number;
+  summary: {
+    verified: number;
+    consistent: number;
+    unverified: number;
+    disputed: number;
+    manual_check: number;
+    has_blocking_disputed: boolean;
+  };
+  results_count: number;
+  error_message?: string | null;
 }
 
 // --- Claims & Verification ---
@@ -231,20 +243,38 @@ export interface KillSwitchStatus {
   activated_at: string | null;
 }
 
+export interface DrawdownTrigger {
+  triggered: boolean;
+  drawdown_pct?: number;
+  threshold_pct?: number;
+  current_value?: number;
+  highwater_value?: number;
+  detail?: string;
+}
+
+export interface BrokerCbTrigger {
+  triggered: boolean;
+  cb_state?: string;
+  failure_count?: number;
+  detail?: string;
+}
+
+export interface VerificationRateTrigger {
+  triggered: boolean;
+  rate_pct?: number;
+  threshold_pct?: number;
+  verified_count?: number;
+  total_claims?: number;
+  detail?: string;
+}
+
 export interface KillSwitchEvaluateResponse {
-  kill_switch_activated: boolean;
-  triggers: Record<
-    string,
-    {
-      triggered: boolean;
-      current_value: number | null;
-      threshold: number | null;
-      message: string;
-    }
-  >;
-  rate_pct: number | null;
-  verified_count: number | null;
-  total_claims: number | null;
+  triggered: boolean;
+  triggers: {
+    drawdown: DrawdownTrigger;
+    broker_cb: BrokerCbTrigger;
+    verification_rate: VerificationRateTrigger;
+  };
 }
 
 export interface BudgetStatus {

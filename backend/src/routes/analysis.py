@@ -81,14 +81,21 @@ def get_analysis(analysis_id: UUID, request: Request) -> dict:
     Used by the frontend to reload a completed analysis via URL persistence.
     """
     user_id = request.state.user["id"]
-    admin = get_supabase_admin()
-    resp = (
-        admin.table("analysis_runs")
-        .select("id, ticker, status, fundamental_out, confidence, recommendation")
-        .eq("id", str(analysis_id))
-        .eq("user_id", user_id)
-        .execute()
-    )
+    try:
+        admin = get_supabase_admin()
+        resp = (
+            admin.table("analysis_runs")
+            .select("id, ticker, status, fundamental_out, confidence, recommendation")
+            .eq("id", str(analysis_id))
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except ConfigurationError as exc:
+        logger.error("Configuration error getting analysis: %s", exc)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    except Exception as exc:
+        logger.error("Unexpected error getting analysis %s: %s", analysis_id, exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     if not resp.data:
         raise HTTPException(status_code=404, detail="Analysis not found")

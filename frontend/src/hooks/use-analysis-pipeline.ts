@@ -150,11 +150,16 @@ export function useAnalysisPipeline(): PipelineResult {
 
         if (abortRef.current) return;
 
-        // Fetch claims with verification details
-        const claimsData = await api.get<{ claims: ClaimWithVerification[] }>(
-          `/api/claims/${analysis.analysis_id}`,
-        );
-        setClaims(claimsData.claims);
+        // Fetch claims with verification details (non-critical — pipeline is already complete)
+        try {
+          const claimsData = await api.get<{ claims: ClaimWithVerification[] }>(
+            `/api/claims/${analysis.analysis_id}`,
+          );
+          setClaims(claimsData.claims);
+        } catch {
+          // Claims fetch failed after successful verification — complete without claims.
+          // User can re-fetch via URL persistence (?id=...)
+        }
 
         setState("complete");
         setCurrentStep(PIPELINE_STEPS.length);

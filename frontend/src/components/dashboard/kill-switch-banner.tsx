@@ -18,7 +18,8 @@ export function KillSwitchBanner() {
       .get<KillSwitchStatus>("/api/system/kill-switch")
       .then(setStatus)
       .catch(() => {
-        // Graceful: banner won't show
+        // Fail-closed: assume kill-switch active when API unreachable
+        setStatus({ active: true, reason: "API nicht erreichbar", activated_at: null });
       });
   }, []);
 

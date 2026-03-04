@@ -67,6 +67,7 @@ export function TickerSearch({ onAnalyze, disabled, initialTicker }: TickerSearc
                   <CommandItem
                     key={item.ticker}
                     value={`${item.ticker} ${item.name}`}
+                    className="min-h-[44px]"
                     onSelect={() => {
                       setSelected(item.ticker);
                       setOpen(false);

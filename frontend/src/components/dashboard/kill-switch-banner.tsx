@@ -52,9 +52,9 @@ export function KillSwitchBanner() {
         </div>
         <Button
           variant="outline"
-          size="sm"
           onClick={handleDeactivate}
           disabled={deactivating}
+          className="min-h-[44px]"
         >
           {deactivating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Deaktivieren

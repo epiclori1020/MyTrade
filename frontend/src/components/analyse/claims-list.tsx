@@ -91,7 +91,7 @@ function ClaimRow({ claim }: { claim: ClaimWithVerification }) {
           isDisputed && "border-disputed/30 bg-disputed/5",
         )}
       >
-        <CollapsibleTrigger className="flex w-full items-start gap-3 text-left">
+        <CollapsibleTrigger className="flex w-full items-start gap-3 text-left min-h-[44px]">
           <ChevronDown
             className={cn(
               "mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform",

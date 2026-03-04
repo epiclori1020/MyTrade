@@ -152,9 +152,8 @@ export function StatusWidgets() {
               <AlertDialogTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
                   disabled={toggling}
-                  className="w-full"
+                  className="w-full min-h-[44px]"
                 >
                   {toggling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Deaktivieren
@@ -179,10 +178,9 @@ export function StatusWidgets() {
           ) : (
             <Button
               variant="outline"
-              size="sm"
               onClick={handleToggleKillSwitch}
               disabled={toggling || !killSwitch}
-              className="w-full"
+              className="w-full min-h-[44px]"
             >
               {toggling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Aktivieren
@@ -264,10 +262,9 @@ export function StatusWidgets() {
           )}
           <Button
             variant="outline"
-            size="sm"
             onClick={handleEvaluate}
             disabled={evaluating}
-            className="w-full"
+            className="w-full min-h-[44px]"
           >
             {evaluating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             System prüfen

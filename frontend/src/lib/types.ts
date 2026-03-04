@@ -289,6 +289,7 @@ export interface BudgetStatus {
       cap: number;
       remaining: number;
       utilization_pct: number;
+      model: string;
     }
   >;
   warnings: string[];

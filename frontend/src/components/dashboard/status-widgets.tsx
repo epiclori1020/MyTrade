@@ -49,18 +49,15 @@ export function StatusWidgets() {
   const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       api.get<KillSwitchStatus>("/api/system/kill-switch"),
       api.get<BudgetStatus>("/api/system/budget"),
       api.get<SystemMetrics>("/api/system/metrics"),
     ])
       .then(([ks, b, m]) => {
-        setKillSwitch(ks);
-        setBudget(b);
-        setMetrics(m);
-      })
-      .catch(() => {
-        // Graceful: widgets show error state individually
+        if (ks.status === "fulfilled") setKillSwitch(ks.value);
+        if (b.status === "fulfilled") setBudget(b.value);
+        if (m.status === "fulfilled") setMetrics(m.value);
       })
       .finally(() => setLoading(false));
   }, []);

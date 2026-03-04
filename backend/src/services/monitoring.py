@@ -31,7 +31,7 @@ def get_system_metrics(user_id: str) -> dict:
         # --- Pipeline error rate + avg latency from analysis_runs ---
         runs_resp = (
             admin.table("analysis_runs")
-            .select("status, started_at, completed_at")
+            .select("id, status, started_at, completed_at")
             .eq("user_id", user_id)
             .gte("started_at", since)
             .execute()

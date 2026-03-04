@@ -4,7 +4,7 @@
 
 ## Wer ich bin
 
-Ich bin Arwin, 33, Österreicher, Solo-Founder. Ich baue "MyTrade" — ein AI-gestütztes Investment-Analyse-System für mich als Langfrist-Investor. Ich bin kein professioneller Entwickler sondern nutze AI-gestütztes "Vibe-Coding". Arbeite selbstständig und liefere fertige, lauffähige Ergebnisse statt Optionen aufzuzählen. Erkläre Architektur-Entscheidungen kurz und klar.
+Ich bin der Entwickler dieses Investment-Analyse-Systems — ein AI-gestütztes Tool für Langfrist-Investoren. Arbeite selbstständig und liefere fertige, lauffähige Ergebnisse statt Optionen aufzuzählen. Erkläre Architektur-Entscheidungen kurz und klar.
 
 ## Was wir bauen
 

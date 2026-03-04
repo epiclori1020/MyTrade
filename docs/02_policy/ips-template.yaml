@@ -12,7 +12,7 @@
 # ============================================================
 
 investor:
-  name: "Arwin"
+  name: "User"
   risk_profile: "moderate-conservative"
   investment_horizon_years: 10
   tax_residency: "AT"

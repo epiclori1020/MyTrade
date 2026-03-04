@@ -43,7 +43,7 @@ def propose_trade(user_id: str, trade_proposal) -> dict:
         "shares": float(trade_proposal.shares),
         "price": float(trade_proposal.price),
         "order_type": "LIMIT",
-        "stop_loss": float(trade_proposal.stop_loss) if trade_proposal.stop_loss else None,
+        "stop_loss": float(trade_proposal.stop_loss) if trade_proposal.stop_loss is not None else None,
         "status": "proposed",
         "broker": "alpaca",
     }
@@ -117,7 +117,7 @@ def approve_trade(trade_id: str, user_id: str) -> dict:
         shares=float(trade["shares"]),
         price=float(trade["price"]),
         order_type=trade.get("order_type", "LIMIT"),
-        stop_loss=float(trade["stop_loss"]) if trade.get("stop_loss") else None,
+        stop_loss=float(trade["stop_loss"]) if trade.get("stop_loss") is not None else None,
     )
 
     try:

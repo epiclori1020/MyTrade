@@ -52,6 +52,7 @@ export function useAnalysisPipeline(): PipelineResult {
   const abortRef = useRef(false);
 
   const reset = useCallback(() => {
+    abortRef.current = true;
     setState("idle");
     setCurrentStep(0);
     setError(null);
@@ -59,7 +60,6 @@ export function useAnalysisPipeline(): PipelineResult {
     setClaims([]);
     setVerificationSummary(null);
     setPolicyViolations(null);
-    abortRef.current = false;
   }, []);
 
   const startAnalysis = useCallback(

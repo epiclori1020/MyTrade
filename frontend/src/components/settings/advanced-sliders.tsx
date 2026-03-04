@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -24,9 +26,10 @@ export function AdvancedSliders({
   onOverrideChange,
 }: AdvancedSlidersProps) {
   const isAdvanced = mode === "ADVANCED";
-  const confirmed = isAdvanced; // Toggle already implies confirmation
+  const [confirmed, setConfirmed] = useState(false);
 
   function handleToggle(checked: boolean) {
+    if (!checked) setConfirmed(false);
     onModeChange(checked ? "ADVANCED" : "PRESET");
   }
 
@@ -51,7 +54,12 @@ export function AdvancedSliders({
       {isAdvanced && (
         <CardContent className="space-y-6">
           <div className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-            <Checkbox id="risk-ack" checked disabled className="mt-0.5" />
+            <Checkbox
+              id="risk-ack"
+              checked={confirmed}
+              onCheckedChange={(v) => setConfirmed(v === true)}
+              className="mt-0.5"
+            />
             <Label
               htmlFor="risk-ack"
               className="text-sm text-muted-foreground"

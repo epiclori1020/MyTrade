@@ -59,8 +59,8 @@ export function ComparisonTable({ activePreset }: ComparisonTableProps) {
             ))}
           </TableRow>
 
-          {/* Slider-based rows */}
-          {SLIDER_CONFIG.map((config) => (
+          {/* Slider-based rows (skip satellite_pct — already in Core/Satellite row) */}
+          {SLIDER_CONFIG.filter((c) => c.key !== "satellite_pct").map((config) => (
             <TableRow key={config.key}>
               <TableCell className="font-medium">{config.label}</TableCell>
               {presetIds.map((id) => {

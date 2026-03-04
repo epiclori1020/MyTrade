@@ -194,22 +194,18 @@ export interface EffectivePolicy {
 // --- Trading ---
 
 export interface TradeResponse {
-  id: string;
-  user_id: string;
-  analysis_id: string;
-  ticker: string;
-  action: "BUY" | "SELL";
-  shares: number;
-  price: number;
-  order_type: string;
-  stop_loss: number | null;
+  trade_id: string;
   status: string;
-  broker: string;
-  broker_order_id: string | null;
-  proposed_at: string;
-  approved_at: string | null;
-  executed_at: string | null;
-  rejection_reason: string | null;
+  ticker?: string;
+  action?: "BUY" | "SELL";
+  shares?: number;
+  price?: number;
+  order_type?: string;
+  stop_loss?: number | null;
+  broker_order_id?: string | null;
+  executed_price?: number | null;
+  proposed_at?: string;
+  rejection_reason?: string | null;
 }
 
 export interface Position {

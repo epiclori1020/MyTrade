@@ -4,6 +4,17 @@ import { Loader2, Shield, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -136,16 +147,47 @@ export function StatusWidgets() {
           </div>
         </CardHeader>
         <CardContent>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleToggleKillSwitch}
-            disabled={toggling || !killSwitch}
-            className="w-full"
-          >
-            {toggling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {killSwitch?.active ? "Deaktivieren" : "Aktivieren"}
-          </Button>
+          {killSwitch?.active ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={toggling}
+                  className="w-full"
+                >
+                  {toggling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Deaktivieren
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Kill-Switch deaktivieren?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Das System wird wieder neue Analysen und Trades erlauben.
+                    Stelle sicher, dass die Ursache der Aktivierung behoben ist.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleToggleKillSwitch}>
+                    Deaktivieren
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToggleKillSwitch}
+              disabled={toggling || !killSwitch}
+              className="w-full"
+            >
+              {toggling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Aktivieren
+            </Button>
+          )}
         </CardContent>
       </Card>
 

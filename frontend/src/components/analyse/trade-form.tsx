@@ -105,7 +105,7 @@ export function TradeForm({ ticker, analysisId }: TradeFormProps) {
     setApproving(true);
     try {
       const result = await api.post<TradeResponse>(
-        `/api/trades/${proposedTrade.id}/approve`,
+        `/api/trades/${proposedTrade.trade_id}/approve`,
         {},
       );
       setTradeStatus(result.status);
@@ -128,7 +128,7 @@ export function TradeForm({ ticker, analysisId }: TradeFormProps) {
   async function handleReject() {
     if (!proposedTrade) return;
     try {
-      await api.post(`/api/trades/${proposedTrade.id}/reject`, {});
+      await api.post(`/api/trades/${proposedTrade.trade_id}/reject`, {});
       setTradeStatus("rejected");
       toast.info("Trade abgelehnt");
     } catch (err) {

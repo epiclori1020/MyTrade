@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from src.config import get_settings
 from src.dependencies.auth import get_current_user
+from src.dependencies.rate_limit import limiter
 from src.main import app
 from tests.helpers import make_test_settings
 
@@ -37,6 +38,9 @@ def auth_client():
 
     patcher_supabase = patch("src.services.supabase.create_client")
     patcher_supabase.start()
+
+    # Reset rate limiter storage so tests don't share counters
+    limiter.reset()
 
     client = TestClient(app, raise_server_exceptions=False)
     yield client

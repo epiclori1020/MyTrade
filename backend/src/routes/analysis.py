@@ -1,6 +1,7 @@
 """Analysis API endpoints."""
 
 import logging
+from uuid import UUID
 
 from fastapi import HTTPException, Request
 
@@ -10,6 +11,7 @@ from src.dependencies.rate_limit import limiter
 from src.routes.helpers import sanitize_error_message
 from src.services.exceptions import BudgetExhaustedError, ConfigurationError, PreconditionError
 from src.services.fundamental_analysis import run_fundamental_analysis
+from src.services.supabase import get_supabase_admin
 
 logger = logging.getLogger(__name__)
 
@@ -67,4 +69,46 @@ def analyze_ticker(ticker: str, request: Request) -> dict:
         "tokens_used": result.tokens_used,
         "cost_usd": result.cost_usd,
         "error_message": sanitize_error_message(result.error_message, "Analysis"),
+    }
+
+
+@router.get("/analyze/{analysis_id}")
+@limiter.limit("50/minute")
+def get_analysis(analysis_id: UUID, request: Request) -> dict:
+    """Retrieve a completed analysis by ID.
+
+    Returns same core fields as POST /analyze/{ticker} (minus cost/token metadata).
+    Used by the frontend to reload a completed analysis via URL persistence.
+    """
+    user_id = request.state.user["id"]
+    try:
+        admin = get_supabase_admin()
+        resp = (
+            admin.table("analysis_runs")
+            .select("id, ticker, status, fundamental_out, confidence, recommendation")
+            .eq("id", str(analysis_id))
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except ConfigurationError as exc:
+        logger.error("Configuration error getting analysis: %s", exc)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    except Exception as exc:
+        logger.error("Unexpected error getting analysis %s: %s", analysis_id, exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+
+    if not resp.data:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    row = resp.data[0]
+
+    # Guard: only expose completed/partial analyses that have fundamental_out
+    if row["status"] not in ("completed", "partial") or row["fundamental_out"] is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    return {
+        "analysis_id": row["id"],
+        "ticker": row["ticker"],
+        "status": row["status"],
+        "fundamental_out": row["fundamental_out"],
     }

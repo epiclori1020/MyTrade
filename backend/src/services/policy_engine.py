@@ -127,6 +127,7 @@ class TradeProposal(BaseModel):
     analysis_id: str
     sector: str | None = None
     is_live_order: bool = False
+    stop_loss: float | None = None
 
 
 @dataclass

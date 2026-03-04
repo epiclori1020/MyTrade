@@ -2,18 +2,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AnalyseLoading() {
   return (
-    <div className="space-y-6">
-      {/* Page heading skeleton */}
-      <Skeleton className="h-8 w-36 rounded-lg" />
+    <div className="mx-auto max-w-5xl space-y-6">
+      <Skeleton className="h-8 w-36" />
 
-      {/* Search bar skeleton */}
-      <Skeleton className="h-10 w-full rounded-lg" />
-
-      {/* Analysis result cards */}
-      <div className="space-y-4">
-        <Skeleton className="h-40 w-full rounded-lg" />
-        <Skeleton className="h-40 w-full rounded-lg" />
+      {/* Search + button */}
+      <div className="flex gap-3">
+        <Skeleton className="h-10 w-80" />
+        <Skeleton className="h-10 w-32" />
       </div>
+
+      {/* Empty state card */}
+      <Skeleton className="h-32 w-full rounded-lg" />
     </div>
   );
 }

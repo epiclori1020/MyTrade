@@ -344,55 +344,49 @@ Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 #### 13a: Analyse-Seite
 
 **Ticker-Eingabe:**
-- [ ] Suchfeld mit Autocomplete/Dropdown (MVP Universe: AAPL, MSFT, JNJ, JPM, PG, VOO, VWO)
-- [ ] "Analyze" Button (prominent, primary action)
-- [ ] Pre-Policy Feedback: sofortige Meldung wenn Ticker verboten (z.B. "BTC ist nicht im erlaubten Universum")
+- [x] Suchfeld mit Autocomplete/Dropdown (MVP Universe: AAPL, MSFT, JNJ, JPM, PG, VOO, VWO)
+- [x] "Analyze" Button (prominent, primary action)
+- [x] Pre-Policy Feedback: sofortige Meldung wenn Ticker verboten (z.B. "BTC ist nicht im erlaubten Universum")
 
 **Analyse Loading State (Dauer: 2-5 Minuten):**
-- [ ] Progress-Indikator mit Schritten:
-  1. "Daten werden geladen..." (Data Collector)
-  2. "Analyse läuft..." (Fundamental Agent)
-  3. "Claims werden extrahiert..." (Claim Extractor)
-  4. "Verification läuft..." (Cross-Check)
-  5. "Policy-Check..." (Full-Policy)
-  6. "Trade Plan wird generiert..."
-- [ ] User kann Seite verlassen und zurückkehren (Analyse läuft im Backend)
-- [ ] Polling oder WebSocket für Status-Updates
+- [x] Progress-Indikator mit 5 automatischen Steps: Pre-Check, Daten sammeln, Analyse, Claims extrahieren, Verifizierung (Policy-Check und Trade Plan sind user-getriggert, keine Pipeline-Steps)
+- [x] N/A: Frontend-orchestrierte Pipeline — State lebt im Client (kein Backend-Queue). Hinweis "Bitte lass diese Seite offen."
+- [x] N/A: Sequentielle API-Calls statt Polling/WebSocket (MVP-gerecht, kein Over-Engineering)
 
 **Analyse-Ergebnis — Investment Note:**
-- [ ] Recommendation Badge: STRONG BUY / BUY / HOLD / SELL / STRONG SELL / NO ACTION
-- [ ] Confidence-Score Anzeige (0-100, visuell als Gauge oder Balken)
-- [ ] These: Kernargumente für die Empfehlung (Bullet Points)
-- [ ] Risiken: Identifizierte Risikofaktoren (Bullet Points)
-- [ ] Daten-Tabelle: Key Financials (Revenue, EPS, P/E, FCF, etc.)
+- [x] Assessment Badge abgeleitet aus Score + Valuation (Kaufkandidat/Attraktiv/Fair bewertet/Nicht attraktiv)
+- [x] Score-Anzeige (0-100, visuell als SVG Gauge)
+- [x] These: Geschäftsmodell-Beschreibung + Moat-Bewertung + Umsatzsegmente
+- [x] Risiken: Identifizierte Risikofaktoren (Bullet Points)
+- [x] Daten-Tabelle: 12 Key Financials (Revenue, Net Income, FCF, EPS, ROE, ROIC, P/E, P/B, EV/EBITDA, FCF Yield, F-Score, Z-Score)
 
 **Claim-Liste mit Ampel-Badges:**
-- [ ] Jeder Claim als Zeile mit:
+- [x] Jeder Claim als Zeile mit:
   - Claim-Text (z.B. "AAPL Revenue FY2025: $394.3B")
   - Status-Badge: grün (`verified`/`consistent`), gelb (`unverified`/`manual_check`), rot (`disputed`)
-  - Quelle + Verification-Quelle (z.B. "Finnhub → Alpha Vantage, Abweichung 0.2%")
-- [ ] Disputed Claims visuell hervorgehoben (roter Rahmen/Hintergrund)
-- [ ] Expandable: Klick zeigt Details (Primärwert, Verification-Wert, Abweichung)
+  - Quelle + Verification-Quelle in expandable Details
+- [x] Disputed Claims visuell hervorgehoben (roter Rahmen/Hintergrund)
+- [x] Expandable: Klick zeigt Details (Primärwert, Verification-Wert, Abweichung, Quelle)
 
 **Trade-Plan:**
-- [ ] Ticker, Richtung (BUY/SELL/HOLD), Shares, Preis, Order-Typ
-- [ ] Begründung (1-2 Sätze)
-- [ ] Stop-Loss Level
-- [ ] Approve / Reject Buttons:
+- [x] Ticker, Richtung (BUY/SELL), Shares, Limit-Preis via manuelles Formular
+- [x] Policy-Check vor Trade-Vorschlag (Full-Policy Validierung)
+- [x] Stop-Loss Level (optional, in trade_log persistiert)
+- [x] Approve / Reject Buttons:
   - Touch-optimiert (min. 44px Höhe)
   - Approve = grün, Reject = rot
-  - Confirm-Dialog bei Approve ("Bist du sicher?")
-- [ ] Disclaimer: "Dies ist keine Anlageberatung. Alle Investmententscheidungen liegen bei dir."
+  - AlertDialog bei Approve ("Paper-Trade bestätigen")
+- [x] Disclaimer: "Dies ist keine Anlageberatung. Alle Investmententscheidungen liegen bei dir."
 
 **States:**
-- [ ] Empty State: "Noch keine Analyse durchgeführt. Wähle einen Ticker."
-- [ ] Error State: "Analyse fehlgeschlagen: [Grund]. Bitte erneut versuchen."
-- [ ] Partial State: "Analyse teilweise abgeschlossen. [Agent-Name] nicht verfügbar."
+- [x] Empty State: "Wähle einen Ticker und starte die Analyse."
+- [x] Error State: Fehlertext + "Erneut versuchen" Button
+- [x] Partial State: Investment Note angezeigt + Warnung "Claims konnten nicht extrahiert/verifiziert werden"
 
 **Responsiveness:**
-- [ ] Desktop: 2-Spalten Layout (Ticker-Input links, Ergebnis rechts)
-- [ ] Mobile (375px): 1-Spalte, vertikal gestapelt, scrollbar
-- [ ] Approve/Reject Buttons auf Mobile: Full-Width, sticky am unteren Rand
+- [x] Desktop: Single Column (max-w-5xl, centered) — Begründung: Investment Note + Claims zu komplex für 2-Spalten
+- [x] Mobile (375px): 1-Spalte, vertikal gestapelt, scrollbar
+- [x] Approve/Reject Buttons: Full-Width mit min-h-[44px]
 
 ---
 
@@ -401,78 +395,63 @@ Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 **Quelle:** @docs/02_policy/settings-spec.md (vollständige Spezifikation)
 
 **Ebene 1 — Einsteiger (Default):**
-- [ ] Profil-Card: "Profil: Einsteiger" + kurze Erklärung
-- [ ] Keine editierbaren Regler
-- [ ] Hinweis: "Du kannst dein Profil in den erweiterten Einstellungen ändern"
+- [x] Einsteiger als Default-Preset ausgewählt (BEGINNER mode)
+- [x] Keine editierbaren Regler (Slider nur bei ADVANCED sichtbar)
+- [x] Presets sichtbar zum Wechsel in höhere Ebene
 
 **Ebene 2 — Presets:**
-- [ ] 3 Preset-Cards nebeneinander (Desktop) / gestapelt (Mobile):
+- [x] 3 Preset-Cards nebeneinander (Desktop) / gestapelt (Mobile):
   - Einsteiger (80/20, konservativ)
   - Balanced (70/30, moderat) — empfohlen
   - Aktiv (60/40, höheres Risiko)
-- [ ] Vergleichstabelle mit allen 9 Werten (aus settings-spec.md)
-- [ ] Info-Panel bei Preset-Wechsel: "Was ändert sich?" + "Risiko steigt/sinkt"
-- [ ] Risiko-Indikator (visuell: niedrig/mittel/hoch)
-- [ ] Cooldown-Hinweis: "Wechsel aktiv ab [Zeitpunkt]" (24h Cooldown für Mode-Wechsel)
+- [x] Vergleichstabelle mit allen 10 Werten (Core/Satellite + 9 Slider-Werte)
+- [x] Info-Panel bei Preset-Wechsel: "Was ändert sich?" — zeigt Differenzen + "Risiko steigt/sinkt"
+- [x] Risiko-Indikator (Badge: niedrig=grün, mittel=gelb, hoch=rot)
+- [x] Cooldown-Banner: "Wechsel zu {Preset} aktiv ab {Zeitpunkt}" mit Live-Countdown
 
 **Ebene 3 — Advanced:**
-- [ ] Toggle "Erweiterte Einstellungen" mit Danger-Zone-UI (roter Rahmen)
-- [ ] Bestätigungs-Checkbox: "Ich verstehe, dass höhere Aktivität/mehr Satellite Risiko erhöht"
-- [ ] 9 Slider mit Microcopy-Tooltips (Texte aus settings-spec.md):
-
-| Regler | Min | Max | Microcopy |
-|--------|-----|-----|-----------|
-| Core/Satellite | 60/40 | 90/10 | "Mehr Satellite = mehr Schwankung" |
-| Max Drawdown | 10% | 30% | "Stoppt alle neuen Trades bei diesem Verlust" |
-| Max Single Position | 3% | 10% | "Begrenzt einzelne Aktien im Satellite" |
-| Max Sektor | 20% | 40% | "Verhindert Tech-only-Portfolio" |
-| Trades/Monat | 2 | 12 | "Mehr Trades = höhere Kosten" |
-| Stop-Loss Flag | 5% | 25% | "Warnt ab diesem Verlust" |
-| EM Cap | 0% | 25% | "Emerging Markets Limit" |
-| Cash-Reserve | 0% | 15% | "Trockenpulver für Kaufgelegenheiten" |
-| Rebalancing-Trigger | 2% | 10% | "Ab dieser Drift → Vorschlag" |
-
-- [ ] Inline Validation: grün/rot Feedback sofort beim Schieben
-- [ ] Werte die Constraints verletzen: Slider stoppt am Limit + Tooltip-Erklärung
-- [ ] "Änderungen speichern" Button → API Call → `policy_change_log` Eintrag
+- [x] Toggle "Erweiterte Einstellungen" mit Danger-Zone-UI (destructive border)
+- [x] Bestätigungs-Checkbox: "Ich verstehe, dass individuell angepasste Einstellungen das Risiko verändern können"
+- [x] 9 Slider mit Microcopy aus settings-spec.md, min/max/step aus CONSTRAINTS
+- [x] Slider constrained zu min/max Range (native Slider constraint)
+- [x] Core/Satellite linked: satellite_pct Slider zeigt core_pct = 100 - satellite_pct
+- [x] "Änderungen speichern" Button → PUT /api/policy/settings → policy_change_log Eintrag
 
 **States:**
-- [ ] Loading State: Skeleton-Loader beim Laden der aktuellen Policy
-- [ ] Success State: Toast "Einstellungen gespeichert"
-- [ ] Error State: Toast "Speichern fehlgeschlagen"
+- [x] Loading State: Skeleton-Loader beim Laden der aktuellen Policy
+- [x] Success State: Toast "Einstellungen gespeichert"
+- [x] Error State: Toast "Speichern fehlgeschlagen"
 
 **Responsiveness:**
-- [ ] Desktop: Preset-Cards nebeneinander, Slider in 2 Spalten
-- [ ] Mobile (375px): Cards gestapelt, Slider full-width
+- [x] Desktop: Preset-Cards nebeneinander (grid-cols-3), Slider in 2 Spalten
+- [x] Mobile (375px): Cards gestapelt, Slider full-width
 
 ---
 
 #### 13c: Dashboard / Home
 
-- [ ] Portfolio-Übersicht:
-  - Gesamtwert (Satellite-Anteil)
-  - Positionen-Liste (Ticker, Shares, Aktueller Wert, P&L %, Status)
+- [x] Portfolio-Übersicht:
+  - Gesamtwert, Cash, Kaufkraft via GET /api/trades/account
+  - Positionen-Tabelle (Ticker, Stück, Ø Preis, Aktuell, Marktwert, P&L %)
   - Wenn keine Positionen: "Noch keine Paper-Trades ausgeführt"
-- [ ] Letzte Analysen:
-  - Ticker, Datum, Recommendation Badge, Confidence
-  - Klick → navigiert zur Analyse-Detail-Seite
-  - Wenn keine Analysen: "Starte deine erste Analyse"
-- [ ] Status-Widgets (Sidebar oder Top-Bar):
-  - Verification-Score: % verifizierte Claims (>85% grün, 70-85% gelb, <70% rot)
-  - Kill-Switch Status: aktiv/inaktiv + manueller Toggle
-  - Kosten MTD: API-Kosten diesen Monat vs. Budget
-- [ ] System-Health:
-  - Letzte erfolgreiche Analyse (Timestamp)
-  - Offene Trade-Vorschläge (Anzahl)
+- [x] Letzte Analysen:
+  - Ticker, Datum, Score-Badge (farbcodiert), Status
+  - Klick → navigiert zu /analyse?ticker={ticker}
+  - Wenn keine Analysen: "Erste Analyse starten" Link
+- [x] Status-Widgets (3-Grid):
+  - Kill-Switch: Status-Badge (aktiv=rot/inaktiv=grün) + manueller Toggle
+  - API-Kosten MTD: Spend/Cap + Progress Bar + Warnings
+  - System-Check: "System prüfen" Button (manuell, wegen evaluate-Seiteneffekt) → Verification Rate farbcodiert
+- [x] System-Health in Status-Widgets integriert
 
 **States:**
-- [ ] Empty State: Willkommensmeldung + "Starte mit einer Analyse"
-- [ ] Loading State: Skeleton-Loader
-- [ ] Kill-Switch aktiv: Banner oben "System pausiert — Kill-Switch aktiv"
+- [x] Empty State: "Erste Analyse starten" Link + leere Positionen-Meldung
+- [x] Loading State: Skeleton-Loader (Portfolio, Positionen, Widgets)
+- [x] Kill-Switch aktiv: Full-width destructive Banner oben "System pausiert — Kill-Switch aktiv"
 
 **Responsiveness:**
-- [ ] Desktop: Grid-Layout (Widgets nebeneinander)
-- [ ] Mobile (375px): Vertikal gestapelt, wichtigste Info oben
+- [x] Desktop: Grid-Layout (md:grid-cols-2 für Positionen/Analysen, sm:grid-cols-3 für Widgets)
+- [x] Mobile (375px): Vertikal gestapelt
 
 ### Step 14: PWA + Mobile Optimization
 

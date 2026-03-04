@@ -108,7 +108,7 @@ def get_budget_status() -> dict:
     """Return budget status per tier with remaining amounts and warnings.
 
     Returns: {tiers: {heavy: {...}, standard: {...}, light: {...}},
-              total_spend, total_cap, warnings: [...]}
+              total_spend, total_cap, remaining, utilization_pct, warnings: [...]}
     """
     spend = get_monthly_spend()
     total_spend = sum(spend.values())
@@ -125,7 +125,7 @@ def get_budget_status() -> dict:
             "spend": round(tier_spend, 4),
             "cap": cap,
             "remaining": round(remaining, 4),
-            "pct_used": round(pct_used, 1),
+            "utilization_pct": round(pct_used, 1),
             "model": TIER_MODELS[tier],
         }
 
@@ -138,10 +138,17 @@ def get_budget_status() -> dict:
             f"(${total_spend:.2f}/${TOTAL_BUDGET_CAP:.2f})"
         )
 
+    total_remaining = round(max(0.0, TOTAL_BUDGET_CAP - total_spend), 4)
+    total_pct = round(
+        (total_spend / TOTAL_BUDGET_CAP * 100) if TOTAL_BUDGET_CAP > 0 else 0.0, 1
+    )
+
     return {
         "tiers": tiers,
         "total_spend": round(total_spend, 4),
         "total_cap": TOTAL_BUDGET_CAP,
+        "remaining": total_remaining,
+        "utilization_pct": total_pct,
         "warnings": warnings,
     }
 

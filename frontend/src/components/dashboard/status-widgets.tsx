@@ -1,6 +1,13 @@
 "use client";
 
-import { Loader2, Shield, ShieldAlert } from "lucide-react";
+import {
+  Activity,
+  Clock,
+  Loader2,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -25,12 +32,14 @@ import type {
   BudgetStatus,
   KillSwitchEvaluateResponse,
   KillSwitchStatus,
+  SystemMetrics,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function StatusWidgets() {
   const [killSwitch, setKillSwitch] = useState<KillSwitchStatus | null>(null);
   const [budget, setBudget] = useState<BudgetStatus | null>(null);
+  const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [evaluating, setEvaluating] = useState(false);
@@ -40,16 +49,15 @@ export function StatusWidgets() {
   const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       api.get<KillSwitchStatus>("/api/system/kill-switch"),
       api.get<BudgetStatus>("/api/system/budget"),
+      api.get<SystemMetrics>("/api/system/metrics"),
     ])
-      .then(([ks, b]) => {
-        setKillSwitch(ks);
-        setBudget(b);
-      })
-      .catch(() => {
-        // Graceful: widgets show error state individually
+      .then(([ks, b, m]) => {
+        if (ks.status === "fulfilled") setKillSwitch(ks.value);
+        if (b.status === "fulfilled") setBudget(b.value);
+        if (m.status === "fulfilled") setMetrics(m.value);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -222,44 +230,68 @@ export function StatusWidgets() {
         </CardContent>
       </Card>
 
-      {/* System Check + Verification Rate */}
+      {/* System Status + Metrics */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">System-Status</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {evalResult ? (
-            (() => {
-              const vr = evalResult.triggers.verification_rate;
-              const rate = vr.rate_pct ?? 0;
-              return (
-                <div className="space-y-1">
-                  <div className="flex items-baseline gap-2">
-                    <span
-                      className={cn(
-                        "font-mono text-lg tabular-nums",
-                        rate > 85
-                          ? "text-verified"
-                          : rate >= 70
-                            ? "text-unverified"
-                            : "text-disputed",
-                      )}
-                    >
-                      {vr.rate_pct != null ? `${rate.toFixed(0)}%` : "—"}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      Verification Rate
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {vr.verified_count ?? 0} / {vr.total_claims ?? 0} Claims
-                  </p>
-                </div>
-              );
-            })()
+        <CardContent className="space-y-3">
+          {/* Always-visible metrics */}
+          {metrics ? (
+            <div className="space-y-2">
+              <MetricRow
+                icon={<ShieldCheck className="h-3.5 w-3.5" />}
+                label="Verification"
+                value={`${metrics.verification_score.rate_pct.toFixed(0)}%`}
+                sub={`${metrics.verification_score.verified ?? 0}/${metrics.verification_score.total} Claims`}
+                color={
+                  metrics.verification_score.rate_pct > 85
+                    ? "text-verified"
+                    : metrics.verification_score.rate_pct >= 70
+                      ? "text-unverified"
+                      : "text-disputed"
+                }
+              />
+              <MetricRow
+                icon={<Activity className="h-3.5 w-3.5" />}
+                label="Fehlerrate"
+                value={`${metrics.pipeline_error_rate.rate_pct.toFixed(0)}%`}
+                sub={`${metrics.pipeline_error_rate.failed ?? 0}/${metrics.pipeline_error_rate.total} fehlgeschlagen`}
+                color={
+                  metrics.pipeline_error_rate.rate_pct < 5
+                    ? "text-verified"
+                    : metrics.pipeline_error_rate.rate_pct <= 10
+                      ? "text-unverified"
+                      : "text-disputed"
+                }
+              />
+              <MetricRow
+                icon={<Clock className="h-3.5 w-3.5" />}
+                label="Latenz"
+                value={`${metrics.avg_latency_seconds.value.toFixed(0)}s`}
+                sub={`${metrics.avg_latency_seconds.total_runs} Runs`}
+                color={
+                  metrics.avg_latency_seconds.value < 60
+                    ? "text-verified"
+                    : metrics.avg_latency_seconds.value <= 120
+                      ? "text-unverified"
+                      : "text-disputed"
+                }
+              />
+            </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Noch nicht geprüft</p>
+            <p className="text-sm text-muted-foreground">Metriken nicht verfügbar</p>
           )}
+
+          {/* Trigger breakdown after evaluation */}
+          {evalResult && (
+            <div className="rounded-md border p-2 space-y-1 text-xs">
+              <TriggerRow label="Drawdown" trigger={evalResult.triggers.drawdown} />
+              <TriggerRow label="Broker CB" trigger={evalResult.triggers.broker_cb} />
+              <TriggerRow label="Verification" trigger={evalResult.triggers.verification_rate} />
+            </div>
+          )}
+
           <Button
             variant="outline"
             onClick={handleEvaluate}
@@ -271,6 +303,60 @@ export function StatusWidgets() {
           </Button>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function MetricRow({
+  icon,
+  label,
+  value,
+  sub,
+  color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub: string;
+  color: string;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        {icon}
+        <span className="text-xs">{label}</span>
+      </div>
+      <div className="text-right">
+        <span className={cn("font-mono text-sm tabular-nums", color)}>
+          {value}
+        </span>
+        <p className="text-[10px] text-muted-foreground leading-tight">{sub}</p>
+      </div>
+    </div>
+  );
+}
+
+function TriggerRow({
+  label,
+  trigger,
+}: {
+  label: string;
+  trigger: { triggered: boolean; detail?: string };
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <Badge
+        variant="outline"
+        className={cn(
+          "text-[10px] px-1.5 py-0",
+          trigger.triggered
+            ? "bg-disputed/15 text-disputed border-disputed/30"
+            : "bg-verified/15 text-verified border-verified/30",
+        )}
+      >
+        {trigger.triggered ? "Ausgelöst" : "OK"}
+      </Badge>
     </div>
   );
 }

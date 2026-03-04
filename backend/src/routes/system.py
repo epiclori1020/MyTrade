@@ -1,4 +1,4 @@
-"""System API endpoints — Kill-Switch status + Budget status."""
+"""System API endpoints — Kill-Switch status, Budget status, System metrics."""
 
 import logging
 
@@ -14,6 +14,7 @@ from src.services.kill_switch import (
     evaluate_kill_switch_triggers,
     get_kill_switch_status,
 )
+from src.services.monitoring import get_system_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -107,12 +108,30 @@ def budget(request: Request) -> dict:
     """Get current monthly budget status per tier.
 
     Returns: {tiers: {heavy: {...}, standard: {...}, light: {...}},
-              total_spend, total_cap, warnings: [...]}
+              total_spend, total_cap, remaining, utilization_pct, warnings: [...]}
     """
     try:
         return get_budget_status()
     except Exception as exc:
         logger.error("Failed to get budget status: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail="System service temporarily unavailable",
+        )
+
+
+@router.get("/metrics")
+@limiter.limit("30/minute")
+def metrics(request: Request) -> dict:
+    """Get aggregated system metrics (pipeline error rate, latency, verification score).
+
+    Returns: {pipeline_error_rate: {...}, avg_latency_seconds: {...}, verification_score: {...}}
+    """
+    try:
+        user_id = request.state.user["id"]
+        return get_system_metrics(user_id)
+    except Exception as exc:
+        logger.error("Failed to get system metrics: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=503,
             detail="System service temporarily unavailable",

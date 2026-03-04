@@ -1,6 +1,6 @@
 """Tests for the System API routes (src/routes/system.py).
 
-Covers Kill-Switch status, activate, deactivate, evaluate, and budget endpoints.
+Covers Kill-Switch status, activate, deactivate, evaluate, budget, and metrics endpoints.
 All tests use auth_client fixture and mock the service layer — no real DB or LLM calls.
 
 Mocking target: src.routes.system.<function_name>
@@ -37,26 +37,28 @@ BUDGET_RESPONSE = {
             "spend": 5.0,
             "cap": 30.0,
             "remaining": 25.0,
-            "pct_used": 16.7,
+            "utilization_pct": 16.7,
             "model": "claude-opus-4-6",
         },
         "standard": {
             "spend": 2.5,
             "cap": 20.0,
             "remaining": 17.5,
-            "pct_used": 12.5,
+            "utilization_pct": 12.5,
             "model": "claude-sonnet-4-6",
         },
         "light": {
             "spend": 0.1,
             "cap": 5.0,
             "remaining": 4.9,
-            "pct_used": 2.0,
+            "utilization_pct": 2.0,
             "model": "claude-haiku-4-5",
         },
     },
     "total_spend": 7.6,
     "total_cap": 55.0,
+    "remaining": 47.4,
+    "utilization_pct": 13.8,
     "warnings": [],
 }
 
@@ -343,6 +345,8 @@ class TestGetBudget:
         assert set(data["tiers"].keys()) == {"heavy", "standard", "light"}
         assert "total_spend" in data
         assert "total_cap" in data
+        assert "remaining" in data
+        assert "utilization_pct" in data
         assert "warnings" in data
 
     @patch("src.routes.system.get_budget_status")
@@ -355,6 +359,7 @@ class TestGetBudget:
         assert heavy["spend"] == 5.0
         assert heavy["cap"] == 30.0
         assert heavy["remaining"] == 25.0
+        assert heavy["utilization_pct"] == 16.7
         assert heavy["model"] == "claude-opus-4-6"
 
     @patch("src.routes.system.get_budget_status")
@@ -399,6 +404,92 @@ class TestGetBudget:
         try:
             unauth_client = TestClient(app, raise_server_exceptions=False)
             resp = unauth_client.get("/api/system/budget")
+            assert resp.status_code in (401, 403)
+        finally:
+            if orig is not None:
+                app.dependency_overrides[get_current_user] = orig
+
+
+# ---------------------------------------------------------------------------
+# GET /api/system/metrics
+# ---------------------------------------------------------------------------
+
+METRICS_RESPONSE = {
+    "pipeline_error_rate": {
+        "rate_pct": 5.0,
+        "failed": 1,
+        "total": 20,
+        "detail": "1/20 runs failed (30d)",
+    },
+    "avg_latency_seconds": {
+        "value": 45.0,
+        "total_runs": 19,
+        "detail": "Avg 45.0s over 19 completed runs",
+    },
+    "verification_score": {
+        "rate_pct": 88.5,
+        "verified": 46,
+        "total": 52,
+        "detail": "46/52 claims verified/consistent",
+    },
+}
+
+
+class TestGetMetrics:
+    @patch("src.routes.system.get_system_metrics")
+    def test_200_returns_all_metric_sections(self, mock_metrics, auth_client):
+        mock_metrics.return_value = METRICS_RESPONSE
+
+        resp = auth_client.get("/api/system/metrics")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "pipeline_error_rate" in data
+        assert "avg_latency_seconds" in data
+        assert "verification_score" in data
+        assert data["pipeline_error_rate"]["rate_pct"] == 5.0
+        assert data["verification_score"]["rate_pct"] == 88.5
+
+    @patch("src.routes.system.get_system_metrics")
+    def test_200_empty_returns_zeros(self, mock_metrics, auth_client):
+        empty = {
+            "pipeline_error_rate": {"rate_pct": 0.0, "failed": 0, "total": 0, "detail": "0/0 runs failed (30d)"},
+            "avg_latency_seconds": {"value": 0.0, "total_runs": 0, "detail": "Avg 0.0s over 0 completed runs"},
+            "verification_score": {"rate_pct": 0.0, "verified": 0, "total": 0, "detail": "0/0 claims verified/consistent"},
+        }
+        mock_metrics.return_value = empty
+
+        resp = auth_client.get("/api/system/metrics")
+
+        assert resp.status_code == 200
+        assert resp.json()["pipeline_error_rate"]["total"] == 0
+
+    @patch("src.routes.system.get_system_metrics")
+    def test_forwards_authenticated_user_id(self, mock_metrics, auth_client):
+        mock_metrics.return_value = METRICS_RESPONSE
+
+        auth_client.get("/api/system/metrics")
+
+        mock_metrics.assert_called_once_with(FAKE_USER["id"])
+
+    @patch("src.routes.system.get_system_metrics")
+    def test_503_on_service_error(self, mock_metrics, auth_client):
+        mock_metrics.side_effect = Exception("DB unavailable")
+
+        resp = auth_client.get("/api/system/metrics")
+
+        assert resp.status_code == 503
+        assert "temporarily unavailable" in resp.json()["detail"]
+        assert "DB" not in resp.json()["detail"]
+
+    def test_401_without_auth(self, auth_client):
+        from src.dependencies.auth import get_current_user
+        from src.main import app
+
+        orig = app.dependency_overrides.pop(get_current_user, None)
+        try:
+            unauth_client = TestClient(app, raise_server_exceptions=False)
+            resp = unauth_client.get("/api/system/metrics")
             assert resp.status_code in (401, 403)
         finally:
             if orig is not None:

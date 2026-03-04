@@ -496,11 +496,11 @@ Die Policy Engine ist **deterministisches Python** — KEIN LLM.
 
 **Quelle:** @docs/03_architecture/monitoring.md, @docs/08_eval/metrics.md
 
-- [ ] `agent_cost_log` Tracking pro Agent-Call:
+- [x] `agent_cost_log` Tracking pro Agent-Call:
   - `agent_name`, `model`, `tier`, `input_tokens`, `output_tokens`, `cost_usd`
   - `fallback_from` (NULL = Default-Modell, sonst Quality-Fallback)
   - `degraded` (true = Budget-Fallback aktiv)
-- [ ] Monitoring-Widgets im Dashboard (oder separate Seite):
+- [x] Monitoring-Widgets im Dashboard (oder separate Seite):
   - Kosten MTD vs. Budget-Cap (Opus $30, Sonnet $20, Haiku $5, Gesamt $55)
   - Verification-Score (% verifizierte Claims über alle Analysen)
   - Agent-Health: Grün/Gelb/Rot pro Agent (basierend auf Error Rate)
@@ -532,13 +532,13 @@ Teste den **vollständigen Flow** mit AAPL:
 
 ### Step 15c: Security Check
 
-- [ ] `/security-check` Skill ausführen
-- [ ] Prüfe: keine API Keys in Frontend-Code
-- [ ] Prüfe: RLS aktiv auf allen User-Tabellen
-- [ ] Prüfe: CORS nur erlaubte Origins
-- [ ] Prüfe: `ALPACA_PAPER_MODE=true` Validierung im Code
-- [ ] Prüfe: kein `service_role` Key im Frontend
-- [ ] Prüfe: `.env` in `.gitignore`
+- [x] `/security-check` Skill ausführen
+- [x] Prüfe: keine API Keys in Frontend-Code
+- [x] Prüfe: RLS aktiv auf allen User-Tabellen
+- [x] Prüfe: CORS nur erlaubte Origins
+- [x] Prüfe: `ALPACA_PAPER_MODE=true` Validierung im Code
+- [x] Prüfe: kein `service_role` Key im Frontend
+- [x] Prüfe: `.env` in `.gitignore`
 
 ### Step 15d: Deployment
 
@@ -558,13 +558,13 @@ Teste den **vollständigen Flow** mit AAPL:
 Die vollständige DoD aus @docs/00_build-brief/brief.md:
 
 - [ ] **End-to-End Run:** AAPL Analyse → Claims → Verification → Policy → Paper Trade → Supabase Log
-- [ ] **Policy Engine blockt:** Trade der gegen IPS verstößt wird rejected (nicht nur gewarnt)
-- [ ] **Verification funktioniert:** Min. 1 Claim mit Status != `verified`
-- [ ] **JSON-Outputs validiert:** Agent-Output matcht `claim-schema.json`
-- [ ] **Audit Trail vollständig:** analysis_run, claims, verification, trade_log in Supabase
-- [ ] **Security Hook:** Keine API Keys im Frontend
-- [ ] **PWA installierbar:** manifest.json + Service Worker
-- [ ] **Responsive:** 375px Viewport getestet
+- [x] **Policy Engine blockt:** Trade der gegen IPS verstößt wird rejected (nicht nur gewarnt)
+- [x] **Verification funktioniert:** Min. 1 Claim mit Status != `verified`
+- [x] **JSON-Outputs validiert:** Agent-Output matcht `claim-schema.json`
+- [x] **Audit Trail vollständig:** analysis_run, claims, verification, trade_log in Supabase
+- [x] **Security Hook:** Keine API Keys im Frontend
+- [x] **PWA installierbar:** manifest.json + Service Worker
+- [x] **Responsive:** 375px Viewport getestet
 - [ ] **Deployed:** Backend auf Railway, Frontend auf Vercel, DB auf Supabase EU
 
 ---

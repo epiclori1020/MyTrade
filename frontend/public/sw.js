@@ -87,15 +87,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   // 4. Navigation (Network-First + Offline Fallback)
+  // SSR-rendered HTML may contain user-specific data (email, analysis_runs)
+  // — never cache it. Only serve offline.html when network is unavailable.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then((response) => cloneAndCache(DYNAMIC_CACHE, request, response))
-        .catch(() =>
-          caches
-            .match(request)
-            .then((cached) => cached || caches.match("/offline.html"))
-        )
+      fetch(request).catch(() => caches.match("/offline.html"))
     );
     return;
   }
@@ -131,5 +127,16 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  event.waitUntil(clients.openWindow("/dashboard"));
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windowClients) => {
+        for (const client of windowClients) {
+          if (client.url.includes(self.location.origin) && "focus" in client) {
+            return client.focus();
+          }
+        }
+        return self.clients.openWindow("/dashboard");
+      })
+  );
 });

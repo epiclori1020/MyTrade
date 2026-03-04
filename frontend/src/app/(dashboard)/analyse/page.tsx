@@ -166,7 +166,7 @@ function AnalyseContent() {
             <p className="text-sm text-disputed">
               {error ?? "Ein Fehler ist aufgetreten."}
             </p>
-            <Button variant="outline" size="sm" onClick={reset}>
+            <Button variant="outline" className="min-h-[44px]" onClick={reset}>
               <RotateCcw className="mr-2 h-4 w-4" />
               Erneut versuchen
             </Button>

@@ -7,18 +7,32 @@ Stufe 2+: IBKRAdapter (not implemented)
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from decimal import Decimal
 
 
 @dataclass
 class Order:
-    """Order request to broker."""
+    """Order request to broker.
+
+    Financial fields (shares, price, stop_loss) use Decimal for precision.
+    __post_init__ coerces float/int/str inputs to Decimal automatically.
+    """
 
     ticker: str
     action: str  # "BUY" or "SELL"
-    shares: float
-    price: float
+    shares: Decimal
+    price: Decimal
     order_type: str  # "LIMIT" or "MARKET"
-    stop_loss: float | None = None
+    stop_loss: Decimal | None = None
+
+    def __post_init__(self):
+        """Coerce numeric inputs to Decimal for type safety."""
+        if not isinstance(self.shares, Decimal):
+            self.shares = Decimal(str(self.shares))
+        if not isinstance(self.price, Decimal):
+            self.price = Decimal(str(self.price))
+        if self.stop_loss is not None and not isinstance(self.stop_loss, Decimal):
+            self.stop_loss = Decimal(str(self.stop_loss))
 
 
 @dataclass

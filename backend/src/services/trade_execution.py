@@ -17,6 +17,7 @@ allows user-JWT to set proposed->approved/rejected. Backend transitions
 import logging
 import time
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 from src.services.alpaca_paper import get_broker_adapter
 from src.services.broker_adapter import Order
@@ -123,10 +124,10 @@ def approve_trade(trade_id: str, user_id: str) -> dict:
     order = Order(
         ticker=trade["ticker"],
         action=trade["action"],
-        shares=float(trade["shares"]),
-        price=float(trade["price"]),
+        shares=Decimal(str(trade["shares"])),
+        price=Decimal(str(trade["price"])),
         order_type=trade.get("order_type", "LIMIT"),
-        stop_loss=float(trade["stop_loss"]) if trade.get("stop_loss") is not None else None,
+        stop_loss=Decimal(str(trade["stop_loss"])) if trade.get("stop_loss") is not None else None,
     )
 
     try:

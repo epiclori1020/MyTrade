@@ -15,10 +15,9 @@ from src.services.policy_engine import TradeProposal, run_full_policy
 from src.services.supabase import get_supabase_admin
 from src.services.trade_execution import (
     approve_trade,
-    cleanup_orphaned_trades,
-    expire_stale_trades,
     propose_trade,
     reject_trade,
+    run_lazy_maintenance,
 )
 
 logger = logging.getLogger(__name__)
@@ -150,7 +149,8 @@ def approve(trade_id: UUID, request: Request) -> dict:
             status_code=503,
             detail="Broker service not configured",
         )
-    except CircuitBreakerOpenError:  # Defense-in-depth: approve_trade() catches this, kept as safety net
+    except CircuitBreakerOpenError as exc:  # Defense-in-depth: approve_trade() catches this, kept as safety net
+        logger.warning("Circuit breaker open in approve (defense-in-depth): %s", exc)
         raise HTTPException(
             status_code=503,
             detail="Broker temporarily unavailable — circuit breaker active",
@@ -217,8 +217,7 @@ def list_trades(
         )
 
     # Lazy maintenance before listing
-    expire_stale_trades()
-    cleanup_orphaned_trades()
+    run_lazy_maintenance()
 
     try:
         admin = get_supabase_admin()

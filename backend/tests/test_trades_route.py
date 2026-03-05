@@ -485,10 +485,10 @@ class TestListTradesEndpoint:
         chain.execute.return_value = SimpleNamespace(data=rows)
         return mock_admin
 
-    @patch("src.routes.trades.expire_stale_trades")
+    @patch("src.routes.trades.run_lazy_maintenance")
     @patch("src.routes.trades.get_supabase_admin")
     def test_200_returns_list_of_trades(
-        self, mock_get_admin, mock_expire, auth_client
+        self, mock_get_admin, mock_maint, auth_client
     ):
         rows = [PROPOSED_ROW, {**PROPOSED_ROW, "id": "other-trade-id", "status": "executed"}]
         mock_get_admin.return_value = self._make_admin_mock(rows)
@@ -499,12 +499,12 @@ class TestListTradesEndpoint:
         data = resp.json()
         assert "trades" in data
         assert len(data["trades"]) == 2
-        mock_expire.assert_called_once()
+        mock_maint.assert_called_once()
 
-    @patch("src.routes.trades.expire_stale_trades")
+    @patch("src.routes.trades.run_lazy_maintenance")
     @patch("src.routes.trades.get_supabase_admin")
     def test_200_empty_list_when_no_trades(
-        self, mock_get_admin, mock_expire, auth_client
+        self, mock_get_admin, mock_maint, auth_client
     ):
         mock_get_admin.return_value = self._make_admin_mock([])
 
@@ -514,10 +514,10 @@ class TestListTradesEndpoint:
         data = resp.json()
         assert data["trades"] == []
 
-    @patch("src.routes.trades.expire_stale_trades")
+    @patch("src.routes.trades.run_lazy_maintenance")
     @patch("src.routes.trades.get_supabase_admin")
     def test_200_with_valid_status_filter(
-        self, mock_get_admin, mock_expire, auth_client
+        self, mock_get_admin, mock_maint, auth_client
     ):
         """A valid status filter (e.g. 'proposed') must be accepted and return 200."""
         rows = [PROPOSED_ROW]

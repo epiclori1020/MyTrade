@@ -955,6 +955,26 @@ class TestRunFullPolicy:
 
     @patch("src.services.policy_engine.get_effective_policy")
     @patch("src.services.policy_engine.get_supabase_admin")
+    def test_missing_blocking_manual_check_key_allows(self, mock_admin_fn, mock_get_policy):
+        """Absent has_blocking_manual_check key → no violation (defensive .get() path)."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
+
+        _setup_full_policy_mocks(
+            admin,
+            analysis_verification={"has_blocking_disputed": False},  # key absent
+            holdings=[{"shares": 100, "current_price": 150.0}],
+        )
+
+        proposal = _make_trade_proposal(shares=1, price=150.0)
+        result = run_full_policy(proposal, FAKE_USER_ID)
+
+        rules = [v.rule for v in result.violations]
+        assert "blocking_manual_check" not in rules
+
+    @patch("src.services.policy_engine.get_effective_policy")
+    @patch("src.services.policy_engine.get_supabase_admin")
     def test_both_disputed_and_manual_check_violations(self, mock_admin_fn, mock_get_policy):
         """has_blocking_disputed=True AND has_blocking_manual_check=True → both violations present."""
         admin = _mock_admin_table()

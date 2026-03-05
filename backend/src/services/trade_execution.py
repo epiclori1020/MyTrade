@@ -15,6 +15,7 @@ allows user-JWT to set proposed->approved/rejected. Backend transitions
 """
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 from src.services.alpaca_paper import get_broker_adapter
@@ -24,6 +25,20 @@ from src.services.exceptions import BrokerError, CircuitBreakerOpenError, Precon
 from src.services.supabase import get_supabase_admin
 
 logger = logging.getLogger(__name__)
+
+_MAINTENANCE_INTERVAL_S = 60
+_last_maintenance_at: float = 0.0
+
+
+def run_lazy_maintenance() -> None:
+    """Run expire + cleanup, throttled to once per 60s per process."""
+    global _last_maintenance_at
+    now = time.monotonic()
+    if now - _last_maintenance_at < _MAINTENANCE_INTERVAL_S:
+        return
+    _last_maintenance_at = now
+    expire_stale_trades()
+    cleanup_orphaned_trades()
 
 
 def propose_trade(user_id: str, trade_proposal) -> dict:
@@ -59,7 +74,7 @@ def approve_trade(trade_id: str, user_id: str) -> dict:
     """User approves a proposed trade -> execute via broker.
 
     7-step flow:
-    1. Expire stale trades (prevents approving an expired trade)
+    1. Run lazy maintenance (expire stale + cleanup orphaned, throttled 60s)
     2. Read trade from trade_log
     3. Ownership check (same message for not-found and wrong-user)
     4. Status guard (must be 'proposed')
@@ -68,18 +83,12 @@ def approve_trade(trade_id: str, user_id: str) -> dict:
     6. Verify atomic update succeeded (concurrent modification check)
     7. Call broker submit_order() -> 'executed' or 'failed'
 
-    Crash recovery: If the server crashes between step 5 (status='approved')
-    and step 7 (broker call), cleanup_orphaned_trades() marks orphaned
-    'approved' trades as 'failed' after 1 hour. Called lazily at the start
-    of approve, reject, and list endpoints.
-
     All DB operations via service_role with explicit user_id validation.
 
     Raises:
         PreconditionError: Trade not found, wrong user, or wrong status.
     """
-    expire_stale_trades()
-    cleanup_orphaned_trades()
+    run_lazy_maintenance()
 
     admin = get_supabase_admin()
 
@@ -188,8 +197,7 @@ def reject_trade(trade_id: str, user_id: str, reason: str | None = None) -> dict
     Raises:
         PreconditionError: Trade not found, wrong user, or not in proposed status.
     """
-    expire_stale_trades()
-    cleanup_orphaned_trades()
+    run_lazy_maintenance()
 
     admin = get_supabase_admin()
 
@@ -287,7 +295,7 @@ def cleanup_orphaned_trades(max_age_hours: int = 1) -> int:
         try:
             admin.table("trade_log").update({
                 "status": "failed",
-                "rejection_reason": "Timeout: broker call not completed within 1 hour",
+                "rejection_reason": f"Timeout: broker call not completed within {max_age_hours} hour(s)",
             }).eq("id", row["id"]).execute()
             count += 1
             logger.warning("Cleaned up orphaned trade %s", row["id"])

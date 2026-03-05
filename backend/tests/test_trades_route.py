@@ -9,7 +9,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.services.broker_adapter import AccountInfo, Position
-from src.services.exceptions import BrokerError, ConfigurationError, PreconditionError
+from src.services.exceptions import (
+    BrokerError,
+    CircuitBreakerOpenError,
+    ConfigurationError,
+    PreconditionError,
+)
 from src.services.policy_engine import PolicyResult, PolicyViolation
 from tests.conftest import FAKE_USER
 
@@ -327,6 +332,60 @@ class TestApproveEndpoint:
         assert "temporarily unavailable" in resp.json()["detail"]
         assert "internal" not in resp.json()["detail"].lower()
 
+    # --- T-024: CircuitBreakerOpenError defense-in-depth ---
+
+    @patch("src.routes.trades.approve_trade")
+    def test_503_circuit_breaker_open_error(self, mock_approve, auth_client):
+        """T-024: CircuitBreakerOpenError must return 503 before BrokerError handler."""
+        mock_approve.side_effect = CircuitBreakerOpenError("alpaca")
+
+        resp = auth_client.post(f"/api/trades/{VALID_TRADE_ID}/approve")
+
+        assert resp.status_code == 503
+        detail = resp.json()["detail"]
+        assert "circuit breaker" in detail.lower()
+        # Must not leak the internal provider name
+        assert "alpaca" not in detail.lower()
+
+    # --- T-027: Kill-Switch gate in approve flow ---
+
+    @patch("src.routes.trades.is_kill_switch_active", return_value=True)
+    def test_403_kill_switch_blocks_approve(self, mock_ks, auth_client):
+        """T-027: Active Kill-Switch must block the approve endpoint with 403."""
+        resp = auth_client.post(f"/api/trades/{VALID_TRADE_ID}/approve")
+
+        assert resp.status_code == 403
+        assert "Kill-Switch" in resp.json()["detail"]
+
+    @patch("src.routes.trades.approve_trade")
+    @patch("src.routes.trades.is_kill_switch_active", return_value=True)
+    def test_kill_switch_does_not_call_approve_trade(
+        self, mock_ks, mock_approve, auth_client
+    ):
+        """T-027: When Kill-Switch is active, approve_trade must never be called."""
+        auth_client.post(f"/api/trades/{VALID_TRADE_ID}/approve")
+
+        mock_approve.assert_not_called()
+
+    @patch("src.routes.trades.approve_trade")
+    @patch("src.routes.trades.is_kill_switch_active", return_value=False)
+    def test_kill_switch_inactive_allows_approve(
+        self, mock_ks, mock_approve, auth_client
+    ):
+        """T-027: Inactive Kill-Switch must let the approve flow proceed normally."""
+        mock_approve.return_value = {
+            "trade_id": VALID_TRADE_ID,
+            "status": "executed",
+            "broker_order_id": "alpaca-order-xyz",
+            "executed_price": 150.0,
+        }
+
+        resp = auth_client.post(f"/api/trades/{VALID_TRADE_ID}/approve")
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "executed"
+        mock_approve.assert_called_once()
+
     def test_401_no_auth(self, auth_client):
         from src.dependencies.auth import get_current_user
         from src.main import app
@@ -426,10 +485,10 @@ class TestListTradesEndpoint:
         chain.execute.return_value = SimpleNamespace(data=rows)
         return mock_admin
 
-    @patch("src.routes.trades.expire_stale_trades")
+    @patch("src.routes.trades.run_lazy_maintenance")
     @patch("src.routes.trades.get_supabase_admin")
     def test_200_returns_list_of_trades(
-        self, mock_get_admin, mock_expire, auth_client
+        self, mock_get_admin, mock_maint, auth_client
     ):
         rows = [PROPOSED_ROW, {**PROPOSED_ROW, "id": "other-trade-id", "status": "executed"}]
         mock_get_admin.return_value = self._make_admin_mock(rows)
@@ -440,12 +499,12 @@ class TestListTradesEndpoint:
         data = resp.json()
         assert "trades" in data
         assert len(data["trades"]) == 2
-        mock_expire.assert_called_once()
+        mock_maint.assert_called_once()
 
-    @patch("src.routes.trades.expire_stale_trades")
+    @patch("src.routes.trades.run_lazy_maintenance")
     @patch("src.routes.trades.get_supabase_admin")
     def test_200_empty_list_when_no_trades(
-        self, mock_get_admin, mock_expire, auth_client
+        self, mock_get_admin, mock_maint, auth_client
     ):
         mock_get_admin.return_value = self._make_admin_mock([])
 
@@ -455,10 +514,10 @@ class TestListTradesEndpoint:
         data = resp.json()
         assert data["trades"] == []
 
-    @patch("src.routes.trades.expire_stale_trades")
+    @patch("src.routes.trades.run_lazy_maintenance")
     @patch("src.routes.trades.get_supabase_admin")
     def test_200_with_valid_status_filter(
-        self, mock_get_admin, mock_expire, auth_client
+        self, mock_get_admin, mock_maint, auth_client
     ):
         """A valid status filter (e.g. 'proposed') must be accepted and return 200."""
         rows = [PROPOSED_ROW]

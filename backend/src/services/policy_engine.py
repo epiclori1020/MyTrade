@@ -371,7 +371,7 @@ def run_full_policy(trade_proposal: TradeProposal, user_id: str) -> PolicyResult
     violations: list[PolicyViolation] = []
 
     # --- Check 0: has_blocking_disputed from verification ---
-    _check_blocking_disputed(admin, trade_proposal, user_id, violations)
+    _check_blocking_verification(admin, trade_proposal, user_id, violations)
 
     # --- Check 1: Forbidden instrument type ---
     # MVP: Stub — TradeProposal has no instrument_type field.
@@ -483,11 +483,11 @@ def run_full_policy(trade_proposal: TradeProposal, user_id: str) -> PolicyResult
 # --- DB helpers ---
 
 
-def _check_blocking_disputed(
+def _check_blocking_verification(
     admin, trade_proposal: TradeProposal, user_id: str,
     violations: list[PolicyViolation],
 ) -> None:
-    """Check if analysis has blocking disputed claims."""
+    """Check if analysis has blocking verification issues (disputed or manual_check)."""
     try:
         resp = (
             admin.table("analysis_runs")
@@ -528,6 +528,12 @@ def _check_blocking_disputed(
         violations.append(PolicyViolation(
             rule="blocking_disputed_claims",
             message="Trade-critical claims are disputed — trade blocked",
+            severity="blocking",
+        ))
+    if verification and verification.get("has_blocking_manual_check"):
+        violations.append(PolicyViolation(
+            rule="blocking_manual_check",
+            message="Trade-critical claims need Tier A verification — trade blocked",
             severity="blocking",
         ))
 

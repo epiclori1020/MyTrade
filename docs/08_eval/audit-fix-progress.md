@@ -19,11 +19,11 @@
 - [ ] **T-005:** Backend Dependency Pinning (nach T-026)
 - [ ] **T-007:** Health Endpoint Readiness (503 bei DB-Down)
 
-## Batch 3: P1 Trade-Sicherheit
+## Batch 3: P1 Trade-Sicherheit → umgesetzt in Batch 2 Trade-Hardening
 
-- [ ] **T-006:** manual_check + trade_critical als Blocking
-- [ ] **T-008:** Orphaned Trade Cleanup (nach T-024)
-- [ ] **T-027:** Kill-Switch Check auch im Approve-Flow (nach T-001)
+- [x] **T-006:** manual_check + trade_critical als Blocking
+- [x] **T-008:** Orphaned Trade Cleanup (nach T-024)
+- [x] **T-027:** Kill-Switch Check auch im Approve-Flow (nach T-001)
 
 ## Batch 4: P2 Code-Qualität
 
@@ -52,7 +52,7 @@
 ## Batch 8: P3 Robustness
 
 - [ ] **T-023:** Idempotency für Trade-Propose
-- [ ] **T-024:** CircuitBreakerOpenError in Approve-Flow catchen
+- [x] **T-024:** CircuitBreakerOpenError in Approve-Flow catchen → umgesetzt in Batch 2 Trade-Hardening
 - [ ] **T-029:** Composite Index (status, proposed_at) auf trade_log
 - [ ] **T-032:** Große Funktionen aufteilen (>100 Zeilen)
 
@@ -74,11 +74,11 @@
 |-------|:-------:|:--------:|--------|
 | 1 | 5 | 5 | DONE |
 | 2 | 3 | 0 | — |
-| 3 | 3 | 0 | — |
+| 3 | 3 | 3 | DONE (in Batch 2 Trade-Hardening) |
 | 4 | 3 | 0 | — |
 | 5 | 3 | 0 | — |
 | 6 | 2 | 0 | — |
 | 7 | 4 | 0 | — |
-| 8 | 4 | 0 | — |
+| 8 | 4 | 1 | T-024 done (in Batch 2 Trade-Hardening) |
 | 9 | 7 | 0 | — |
-| **Total** | **34** | **5** | |
+| **Total** | **34** | **9** | |

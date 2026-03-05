@@ -188,12 +188,15 @@ def _build_summary(
     counts = {"verified": 0, "consistent": 0, "disputed": 0, "manual_check": 0}
 
     has_blocking_disputed = False
+    has_blocking_manual_check = False
 
     for claim_row, (status, _conf_adj, _sv_json) in cross_checked_results:
         if status in counts:
             counts[status] += 1
         if status == "disputed" and claim_row.get("trade_critical", False):
             has_blocking_disputed = True
+        if status == "manual_check" and claim_row.get("trade_critical", False):
+            has_blocking_manual_check = True
 
     unverified_count = total_claims - len(cross_checked_results)
 
@@ -204,6 +207,7 @@ def _build_summary(
         "disputed": counts["disputed"],
         "manual_check": counts["manual_check"],
         "has_blocking_disputed": has_blocking_disputed,
+        "has_blocking_manual_check": has_blocking_manual_check,
     }
 
 

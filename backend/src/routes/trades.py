@@ -9,12 +9,13 @@ from pydantic import BaseModel
 from src.dependencies.auth import authenticated_router
 from src.dependencies.rate_limit import limiter
 from src.services.alpaca_paper import get_broker_adapter
-from src.services.exceptions import BrokerError, ConfigurationError, PreconditionError
+from src.services.exceptions import BrokerError, CircuitBreakerOpenError, ConfigurationError, PreconditionError
 from src.services.kill_switch import is_kill_switch_active
 from src.services.policy_engine import TradeProposal, run_full_policy
 from src.services.supabase import get_supabase_admin
 from src.services.trade_execution import (
     approve_trade,
+    cleanup_orphaned_trades,
     expire_stale_trades,
     propose_trade,
     reject_trade,
@@ -132,6 +133,13 @@ def approve(trade_id: UUID, request: Request) -> dict:
     """
     user_id = request.state.user["id"]
 
+    # --- Gate: Kill-Switch ---
+    if is_kill_switch_active():
+        raise HTTPException(
+            status_code=403,
+            detail="System is paused — Kill-Switch is active",
+        )
+
     try:
         result = approve_trade(str(trade_id), user_id)
     except PreconditionError as exc:
@@ -141,6 +149,11 @@ def approve(trade_id: UUID, request: Request) -> dict:
         raise HTTPException(
             status_code=503,
             detail="Broker service not configured",
+        )
+    except CircuitBreakerOpenError:  # Defense-in-depth: approve_trade() catches this, kept as safety net
+        raise HTTPException(
+            status_code=503,
+            detail="Broker temporarily unavailable — circuit breaker active",
         )
     except BrokerError as exc:
         logger.error("Broker error in approve: %s", exc)
@@ -203,8 +216,9 @@ def list_trades(
             f"Allowed: {', '.join(sorted(VALID_TRADE_STATUSES))}",
         )
 
-    # Lazy expiration before listing
+    # Lazy maintenance before listing
     expire_stale_trades()
+    cleanup_orphaned_trades()
 
     try:
         admin = get_supabase_admin()

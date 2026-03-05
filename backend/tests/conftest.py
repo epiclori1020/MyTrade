@@ -46,12 +46,21 @@ def auth_client():
     )
     patcher_admin_settings.start()
 
+    # Default: Kill-Switch is inactive in all route tests.
+    # Individual tests that need it active must apply their own
+    # @patch("src.routes.<module>.is_kill_switch_active", return_value=True).
+    patcher_kill_switch = patch(
+        "src.routes.trades.is_kill_switch_active", return_value=False
+    )
+    patcher_kill_switch.start()
+
     # Reset rate limiter storage so tests don't share counters
     limiter.reset()
 
     client = TestClient(app, raise_server_exceptions=False)
     yield client
 
+    patcher_kill_switch.stop()
     patcher_admin_settings.stop()
     patcher_supabase.stop()
     app.dependency_overrides.clear()

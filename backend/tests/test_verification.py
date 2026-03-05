@@ -297,6 +297,7 @@ class TestBuildSummary:
         assert summary["disputed"] == 0
         assert summary["manual_check"] == 0
         assert summary["has_blocking_disputed"] is False
+        assert summary["has_blocking_manual_check"] is False
 
     def test_disputed_trade_critical_sets_blocking(self):
         results = [
@@ -333,6 +334,7 @@ class TestBuildSummary:
         assert summary["unverified"] == 5
         assert summary["consistent"] == 0
         assert summary["has_blocking_disputed"] is False
+        assert summary["has_blocking_manual_check"] is False
 
     def test_mixed_scenario(self):
         results = [
@@ -346,6 +348,35 @@ class TestBuildSummary:
         assert summary["consistent"] == 1
         assert summary["unverified"] == 3
         assert summary["has_blocking_disputed"] is True
+        assert summary["has_blocking_manual_check"] is True
+
+    def test_manual_check_trade_critical_sets_blocking(self):
+        """manual_check + trade_critical=True → has_blocking_manual_check is True."""
+        results = [
+            ({"trade_critical": True}, ("manual_check", -15, {})),
+        ]
+        summary = _build_summary(total_claims=3, cross_checked_results=results)
+        assert summary["manual_check"] == 1
+        assert summary["has_blocking_manual_check"] is True
+
+    def test_manual_check_non_critical_no_blocking(self):
+        """manual_check + trade_critical=False → has_blocking_manual_check is False."""
+        results = [
+            ({"trade_critical": False}, ("manual_check", -15, {})),
+        ]
+        summary = _build_summary(total_claims=3, cross_checked_results=results)
+        assert summary["manual_check"] == 1
+        assert summary["has_blocking_manual_check"] is False
+
+    def test_both_blocking_flags_can_be_true(self):
+        """disputed+trade_critical and manual_check+trade_critical → both flags True."""
+        results = [
+            ({"trade_critical": True}, ("disputed", -15, {})),
+            ({"trade_critical": True}, ("manual_check", -15, {})),
+        ]
+        summary = _build_summary(total_claims=4, cross_checked_results=results)
+        assert summary["has_blocking_disputed"] is True
+        assert summary["has_blocking_manual_check"] is True
 
 
 # --- Phase A Pre-Condition Tests ---

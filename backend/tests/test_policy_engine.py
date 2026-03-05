@@ -912,3 +912,64 @@ class TestRunFullPolicy:
         assert result.policy_snapshot is not None
         assert "max_drawdown_pct" in result.policy_snapshot
         assert "forbidden_types" in result.policy_snapshot
+
+    @patch("src.services.policy_engine.get_effective_policy")
+    @patch("src.services.policy_engine.get_supabase_admin")
+    def test_blocking_manual_check_blocks_trade(self, mock_admin_fn, mock_get_policy):
+        """has_blocking_manual_check=True → trade blocked with blocking_manual_check violation."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
+
+        _setup_full_policy_mocks(
+            admin,
+            analysis_verification={"has_blocking_disputed": False, "has_blocking_manual_check": True},
+        )
+
+        proposal = _make_trade_proposal()
+        result = run_full_policy(proposal, FAKE_USER_ID)
+
+        assert result.passed is False
+        rules = [v.rule for v in result.violations]
+        assert "blocking_manual_check" in rules
+
+    @patch("src.services.policy_engine.get_effective_policy")
+    @patch("src.services.policy_engine.get_supabase_admin")
+    def test_no_blocking_manual_check_allows(self, mock_admin_fn, mock_get_policy):
+        """has_blocking_manual_check=False → no blocking_manual_check violation."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
+
+        _setup_full_policy_mocks(
+            admin,
+            analysis_verification={"has_blocking_disputed": False, "has_blocking_manual_check": False},
+            holdings=[{"shares": 100, "current_price": 150.0}],
+        )
+
+        proposal = _make_trade_proposal(shares=1, price=150.0)
+        result = run_full_policy(proposal, FAKE_USER_ID)
+
+        rules = [v.rule for v in result.violations]
+        assert "blocking_manual_check" not in rules
+
+    @patch("src.services.policy_engine.get_effective_policy")
+    @patch("src.services.policy_engine.get_supabase_admin")
+    def test_both_disputed_and_manual_check_violations(self, mock_admin_fn, mock_get_policy):
+        """has_blocking_disputed=True AND has_blocking_manual_check=True → both violations present."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+        mock_get_policy.return_value = _build_effective_policy(PRESETS["balanced"])
+
+        _setup_full_policy_mocks(
+            admin,
+            analysis_verification={"has_blocking_disputed": True, "has_blocking_manual_check": True},
+        )
+
+        proposal = _make_trade_proposal()
+        result = run_full_policy(proposal, FAKE_USER_ID)
+
+        assert result.passed is False
+        rules = [v.rule for v in result.violations]
+        assert "blocking_disputed_claims" in rules
+        assert "blocking_manual_check" in rules

@@ -39,11 +39,19 @@ def auth_client():
     patcher_supabase = patch("src.services.supabase.create_client")
     patcher_supabase.start()
 
+    # Patch get_settings at the admin dependency import location so that
+    # require_admin() (a plain function call, not FastAPI DI) gets test settings.
+    patcher_admin_settings = patch(
+        "src.dependencies.admin.get_settings", return_value=make_test_settings()
+    )
+    patcher_admin_settings.start()
+
     # Reset rate limiter storage so tests don't share counters
     limiter.reset()
 
     client = TestClient(app, raise_server_exceptions=False)
     yield client
 
+    patcher_admin_settings.stop()
     patcher_supabase.stop()
     app.dependency_overrides.clear()

@@ -18,10 +18,6 @@ dependencies = [
     "slowapi>=0.1.9",
     "anthropic>=0.84.0",
     "json-repair>=0.30.0",
-    "agno>=1.0.0",
-    "agno[anthropic]",
-    "agno[postgres]",
-    "agno[sql]",
 ]
 
 [project.optional-dependencies]

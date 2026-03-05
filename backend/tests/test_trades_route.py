@@ -10,7 +10,41 @@ import pytest
 
 from src.services.broker_adapter import AccountInfo, Position
 from src.services.exceptions import BrokerError, ConfigurationError, PreconditionError
+from src.services.policy_engine import PolicyResult, PolicyViolation
 from tests.conftest import FAKE_USER
+
+
+# ---------------------------------------------------------------------------
+# Helpers for propose tests (Kill-Switch + Full-Policy gates)
+# ---------------------------------------------------------------------------
+
+POLICY_PASSED = PolicyResult(passed=True, violations=[], policy_snapshot={})
+
+POLICY_FAILED_POSITION = PolicyResult(
+    passed=False,
+    violations=[
+        PolicyViolation(
+            rule="max_single_position",
+            message="Position size 12.5% exceeds limit of 5%",
+            severity="blocking",
+            current_value=12.5,
+            limit_value=5,
+        ),
+    ],
+    policy_snapshot={},
+)
+
+POLICY_FAILED_OWNERSHIP = PolicyResult(
+    passed=False,
+    violations=[
+        PolicyViolation(
+            rule="analysis_not_found",
+            message="Analysis run not found",
+            severity="blocking",
+        ),
+    ],
+    policy_snapshot={},
+)
 
 
 # ---------------------------------------------------------------------------
@@ -44,8 +78,19 @@ PROPOSED_ROW = {
 
 
 class TestProposeEndpoint:
+    """Tests for POST /api/trades/propose.
+
+    The route enforces two server-side gates before writing to trade_log:
+    1. Kill-Switch check (403 if active)
+    2. Full-Policy check (400 if violations)
+    """
+
     @patch("src.routes.trades.propose_trade")
-    def test_200_success_returns_trade_fields(self, mock_propose, auth_client):
+    @patch("src.routes.trades.run_full_policy", return_value=POLICY_PASSED)
+    @patch("src.routes.trades.is_kill_switch_active", return_value=False)
+    def test_200_success_returns_trade_fields(
+        self, mock_ks, mock_policy, mock_propose, auth_client
+    ):
         mock_propose.return_value = PROPOSED_ROW
 
         resp = auth_client.post("/api/trades/propose", json=TRADE_PROPOSAL_BODY)
@@ -58,14 +103,125 @@ class TestProposeEndpoint:
         assert data["action"] == "BUY"
         assert data["shares"] == 10.0
         assert data["price"] == 150.0
+        # Verify gates were called
+        mock_ks.assert_called_once()
+        mock_policy.assert_called_once()
 
     def test_422_invalid_body_missing_required_fields(self, auth_client):
         resp = auth_client.post("/api/trades/propose", json={"ticker": "AAPL"})
 
         assert resp.status_code == 422
 
+    # --- Kill-Switch gate tests ---
+
+    @patch("src.routes.trades.is_kill_switch_active", return_value=True)
+    def test_403_kill_switch_active_blocks_trade(self, mock_ks, auth_client):
+        resp = auth_client.post("/api/trades/propose", json=TRADE_PROPOSAL_BODY)
+
+        assert resp.status_code == 403
+        assert "Kill-Switch" in resp.json()["detail"]
+
+    @patch("src.routes.trades.run_full_policy")
+    @patch("src.routes.trades.is_kill_switch_active", return_value=True)
+    def test_403_kill_switch_does_not_call_policy(
+        self, mock_ks, mock_policy, auth_client
+    ):
+        """When Kill-Switch is active, policy engine should never be called."""
+        auth_client.post("/api/trades/propose", json=TRADE_PROPOSAL_BODY)
+
+        mock_policy.assert_not_called()
+
+    # --- Full-Policy gate tests ---
+
+    @patch("src.routes.trades.run_full_policy", return_value=POLICY_FAILED_POSITION)
+    @patch("src.routes.trades.is_kill_switch_active", return_value=False)
+    def test_400_policy_violation_returns_violations_list(
+        self, mock_ks, mock_policy, auth_client
+    ):
+        resp = auth_client.post("/api/trades/propose", json=TRADE_PROPOSAL_BODY)
+
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert detail["message"] == "Policy check failed"
+        assert len(detail["violations"]) == 1
+        violation = detail["violations"][0]
+        assert violation["rule"] == "max_single_position"
+        assert violation["severity"] == "blocking"
+
+    @patch("src.routes.trades.run_full_policy", return_value=POLICY_FAILED_OWNERSHIP)
+    @patch("src.routes.trades.is_kill_switch_active", return_value=False)
+    def test_400_ownership_failure_returns_analysis_not_found(
+        self, mock_ks, mock_policy, auth_client
+    ):
+        resp = auth_client.post("/api/trades/propose", json=TRADE_PROPOSAL_BODY)
+
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        violations = detail["violations"]
+        assert any(v["rule"] == "analysis_not_found" for v in violations)
+
     @patch("src.routes.trades.propose_trade")
-    def test_503_configuration_error(self, mock_propose, auth_client):
+    @patch("src.routes.trades.run_full_policy", return_value=POLICY_FAILED_POSITION)
+    @patch("src.routes.trades.is_kill_switch_active", return_value=False)
+    def test_400_policy_violation_does_not_write_trade(
+        self, mock_ks, mock_policy, mock_propose, auth_client
+    ):
+        """When policy fails, propose_trade must NOT be called."""
+        auth_client.post("/api/trades/propose", json=TRADE_PROPOSAL_BODY)
+
+        mock_propose.assert_not_called()
+
+    @patch("src.routes.trades.run_full_policy")
+    @patch("src.routes.trades.is_kill_switch_active", return_value=False)
+    def test_400_violation_does_not_leak_internal_values(
+        self, mock_ks, mock_policy, auth_client
+    ):
+        """Violation response should NOT include current_value or limit_value."""
+        mock_policy.return_value = POLICY_FAILED_POSITION
+
+        resp = auth_client.post("/api/trades/propose", json=TRADE_PROPOSAL_BODY)
+
+        assert resp.status_code == 400
+        violation = resp.json()["detail"]["violations"][0]
+        assert "current_value" not in violation
+        assert "limit_value" not in violation
+
+    # --- Policy engine error tests ---
+
+    @patch("src.routes.trades.run_full_policy")
+    @patch("src.routes.trades.is_kill_switch_active", return_value=False)
+    def test_503_policy_engine_configuration_error(
+        self, mock_ks, mock_policy, auth_client
+    ):
+        mock_policy.side_effect = ConfigurationError("DB unavailable")
+
+        resp = auth_client.post("/api/trades/propose", json=TRADE_PROPOSAL_BODY)
+
+        assert resp.status_code == 503
+        assert "not configured" in resp.json()["detail"]
+        assert "DB" not in resp.json()["detail"]
+
+    @patch("src.routes.trades.run_full_policy")
+    @patch("src.routes.trades.is_kill_switch_active", return_value=False)
+    def test_503_policy_engine_unexpected_error(
+        self, mock_ks, mock_policy, auth_client
+    ):
+        mock_policy.side_effect = RuntimeError("unexpected crash")
+
+        resp = auth_client.post("/api/trades/propose", json=TRADE_PROPOSAL_BODY)
+
+        assert resp.status_code == 503
+        assert "temporarily unavailable" in resp.json()["detail"]
+        assert "crash" not in resp.json()["detail"]
+
+    # --- propose_trade error tests ---
+
+    @patch("src.routes.trades.propose_trade")
+    @patch("src.routes.trades.run_full_policy", return_value=POLICY_PASSED)
+    @patch("src.routes.trades.is_kill_switch_active", return_value=False)
+    def test_503_propose_trade_configuration_error(
+        self, mock_ks, mock_policy, mock_propose, auth_client
+    ):
         mock_propose.side_effect = ConfigurationError("Supabase not configured")
 
         resp = auth_client.post("/api/trades/propose", json=TRADE_PROPOSAL_BODY)
@@ -73,6 +229,8 @@ class TestProposeEndpoint:
         assert resp.status_code == 503
         assert "not configured" in resp.json()["detail"]
         assert "Supabase" not in resp.json()["detail"]
+
+    # --- Auth tests ---
 
     def test_401_no_auth(self, auth_client):
         from src.dependencies.auth import get_current_user

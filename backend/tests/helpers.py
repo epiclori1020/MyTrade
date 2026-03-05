@@ -13,4 +13,5 @@ def make_test_settings() -> Settings:
         anthropic_api_key="test-anthropic-key",
         alpaca_api_key="test-alpaca-key",
         alpaca_secret_key="test-alpaca-secret",
+        admin_user_ids="test-user-id-123",
     )

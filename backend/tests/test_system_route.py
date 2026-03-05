@@ -10,8 +10,12 @@ Mocking target: src.routes.system.<function_name>
 from unittest.mock import patch
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 
+from src.config import Settings, get_settings
+from src.dependencies.auth import get_current_user
+from src.main import app
 from tests.conftest import FAKE_USER
 
 
@@ -494,3 +498,144 @@ class TestGetMetrics:
         finally:
             if orig is not None:
                 app.dependency_overrides[get_current_user] = orig
+
+
+# ---------------------------------------------------------------------------
+# Admin-Guard Integration Tests (T-002)
+# ---------------------------------------------------------------------------
+
+NON_ADMIN_USER = {"id": "non-admin-user-id-456", "email": "nonadmin@example.com"}
+
+
+def _make_non_admin_settings() -> Settings:
+    """Settings where FAKE_USER is admin but NON_ADMIN_USER is not."""
+    return Settings(
+        supabase_url="https://test.supabase.co",
+        supabase_anon_key="test-anon-key",
+        supabase_service_role_key="test-service-role-key",
+        cors_origins="http://localhost:3000",
+        finnhub_api_key="test-finnhub-key",
+        alpha_vantage_api_key="test-av-key",
+        anthropic_api_key="test-anthropic-key",
+        alpaca_api_key="test-alpaca-key",
+        alpaca_secret_key="test-alpaca-secret",
+        admin_user_ids="test-user-id-123",
+    )
+
+
+def _non_admin_get_current_user(request: Request) -> dict:
+    """Override that sets a non-admin user."""
+    request.state.user = NON_ADMIN_USER
+    return NON_ADMIN_USER
+
+
+@pytest.fixture
+def non_admin_client():
+    """Authenticated test client where the user is NOT an admin."""
+    from src.dependencies.rate_limit import limiter
+
+    app.dependency_overrides[get_current_user] = _non_admin_get_current_user
+    app.dependency_overrides[get_settings] = _make_non_admin_settings
+
+    patcher_supabase = patch("src.services.supabase.create_client")
+    patcher_supabase.start()
+
+    # Patch get_settings at the admin dependency import location
+    patcher_admin_settings = patch(
+        "src.dependencies.admin.get_settings",
+        return_value=_make_non_admin_settings(),
+    )
+    patcher_admin_settings.start()
+
+    limiter.reset()
+
+    client = TestClient(app, raise_server_exceptions=False)
+    yield client
+
+    patcher_admin_settings.stop()
+    patcher_supabase.stop()
+    app.dependency_overrides.clear()
+
+
+class TestAdminGuardActivate:
+    """Activate endpoint requires admin role."""
+
+    def test_403_for_non_admin_user(self, non_admin_client):
+        resp = non_admin_client.post(
+            "/api/system/kill-switch/activate",
+            json={"reason": "manual"},
+        )
+
+        assert resp.status_code == 403
+        assert "Admin access required" in resp.json()["detail"]
+
+    @patch("src.routes.system.activate_kill_switch")
+    def test_200_for_admin_user(self, mock_activate, auth_client):
+        """Existing auth_client has FAKE_USER which IS in admin_user_ids."""
+        mock_activate.return_value = {
+            "active": True,
+            "reason": "manual",
+            "activated_at": "2026-03-05T10:00:00+00:00",
+        }
+
+        resp = auth_client.post("/api/system/kill-switch/activate")
+
+        assert resp.status_code == 200
+        assert resp.json()["active"] is True
+
+
+class TestAdminGuardDeactivate:
+    """Deactivate endpoint requires admin role."""
+
+    def test_403_for_non_admin_user(self, non_admin_client):
+        resp = non_admin_client.post("/api/system/kill-switch/deactivate")
+
+        assert resp.status_code == 403
+        assert "Admin access required" in resp.json()["detail"]
+
+    @patch("src.routes.system.deactivate_kill_switch")
+    def test_200_for_admin_user(self, mock_deactivate, auth_client):
+        mock_deactivate.return_value = INACTIVE_STATUS
+
+        resp = auth_client.post("/api/system/kill-switch/deactivate")
+
+        assert resp.status_code == 200
+        assert resp.json()["active"] is False
+
+
+class TestAdminGuardNotApplied:
+    """Verify that non-admin endpoints are NOT guarded."""
+
+    @patch("src.routes.system.get_kill_switch_status")
+    def test_get_kill_switch_accessible_to_non_admin(
+        self, mock_status, non_admin_client
+    ):
+        mock_status.return_value = INACTIVE_STATUS
+
+        resp = non_admin_client.get("/api/system/kill-switch")
+
+        assert resp.status_code == 200
+
+    @patch("src.routes.system.evaluate_kill_switch_triggers")
+    def test_evaluate_accessible_to_non_admin(self, mock_evaluate, non_admin_client):
+        mock_evaluate.return_value = NO_TRIGGER_RESULT
+
+        resp = non_admin_client.post("/api/system/kill-switch/evaluate")
+
+        assert resp.status_code == 200
+
+    @patch("src.routes.system.get_budget_status")
+    def test_budget_accessible_to_non_admin(self, mock_budget, non_admin_client):
+        mock_budget.return_value = BUDGET_RESPONSE
+
+        resp = non_admin_client.get("/api/system/budget")
+
+        assert resp.status_code == 200
+
+    @patch("src.routes.system.get_system_metrics")
+    def test_metrics_accessible_to_non_admin(self, mock_metrics, non_admin_client):
+        mock_metrics.return_value = METRICS_RESPONSE
+
+        resp = non_admin_client.get("/api/system/metrics")
+
+        assert resp.status_code == 200

@@ -5,6 +5,7 @@ import logging
 from fastapi import HTTPException, Request
 from pydantic import BaseModel, Field
 
+from src.dependencies.admin import require_admin
 from src.dependencies.auth import authenticated_router
 from src.dependencies.rate_limit import limiter
 from src.services.budget_manager import get_budget_status
@@ -52,6 +53,7 @@ def activate(request: Request, body: ActivateBody | None = None) -> dict:
     Optional body: {"reason": "manual explanation"}
     Returns: {active: true, reason, activated_at}
     """
+    require_admin(request)
     reason = body.reason if body else "manual"
 
     try:
@@ -71,6 +73,7 @@ def deactivate(request: Request) -> dict:
 
     Returns: {active: false, reason: null, activated_at: null}
     """
+    require_admin(request)
     try:
         return deactivate_kill_switch()
     except Exception as exc:

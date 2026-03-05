@@ -42,10 +42,18 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
+    # --- Admin ---
+    admin_user_ids: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         """Split comma-separated CORS origins into a list."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def admin_user_id_list(self) -> list[str]:
+        """Split comma-separated admin user IDs into a list."""
+        return [uid.strip() for uid in self.admin_user_ids.split(",") if uid.strip()]
 
 
 @lru_cache

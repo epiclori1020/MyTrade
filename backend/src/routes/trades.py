@@ -10,7 +10,8 @@ from src.dependencies.auth import authenticated_router
 from src.dependencies.rate_limit import limiter
 from src.services.alpaca_paper import get_broker_adapter
 from src.services.exceptions import BrokerError, ConfigurationError, PreconditionError
-from src.services.policy_engine import TradeProposal
+from src.services.kill_switch import is_kill_switch_active
+from src.services.policy_engine import TradeProposal, run_full_policy
 from src.services.supabase import get_supabase_admin
 from src.services.trade_execution import (
     approve_trade,
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 router = authenticated_router(prefix="/api/trades", tags=["trades"])
 
 VALID_TRADE_STATUSES = frozenset({
-    "proposed", "approved", "rejected", "executed", "failed", "expired",
+    "proposed", "approved", "rejected", "executed", "failed",
 })
 
 
@@ -37,15 +38,57 @@ class RejectBody(BaseModel):
 @router.post("/propose")
 @limiter.limit("50/minute")
 def propose(request: Request, trade_proposal: TradeProposal) -> dict:
-    """Create a trade proposal (status: proposed).
+    """Create a trade proposal after Kill-Switch + Full-Policy checks.
 
-    Called after Full-Policy has passed. TradeProposal fields `sector` and
-    `is_live_order` are policy-only and not written to trade_log.
+    Server-side enforcement: even if the frontend skips policy checks,
+    this endpoint validates Kill-Switch and Full-Policy before writing
+    to trade_log.  TradeProposal fields `sector` and `is_live_order`
+    are policy-only and not written to trade_log.
 
     Returns: {trade_id, status, ticker, action, shares, price, proposed_at}
     """
     user_id = request.state.user["id"]
 
+    # --- Gate 1: Kill-Switch ---
+    if is_kill_switch_active():
+        raise HTTPException(
+            status_code=403,
+            detail="System is paused — Kill-Switch is active",
+        )
+
+    # --- Gate 2: Full-Policy ---
+    try:
+        policy_result = run_full_policy(trade_proposal, user_id)
+    except ConfigurationError as exc:
+        logger.error("Policy engine configuration error: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Policy service not configured",
+        )
+    except Exception as exc:
+        logger.error("Policy engine error: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Policy service temporarily unavailable",
+        )
+
+    if not policy_result.passed:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Policy check failed",
+                "violations": [
+                    {
+                        "rule": v.rule,
+                        "message": v.message,
+                        "severity": v.severity,
+                    }
+                    for v in policy_result.violations
+                ],
+            },
+        )
+
+    # --- Gate passed: write trade proposal ---
     try:
         row = propose_trade(user_id, trade_proposal)
     except ConfigurationError as exc:

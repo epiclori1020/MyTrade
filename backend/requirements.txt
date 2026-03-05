@@ -1,3 +1,6 @@
+# Human-readable dependency list — edit here, then regenerate lock:
+#   pip-compile requirements.txt -o requirements.lock --generate-hashes --no-header
+#
 # Runtime dependencies — keep in sync with pyproject.toml
 fastapi>=0.115.0
 uvicorn[standard]>=0.34.0

@@ -10,6 +10,7 @@ Structure:
 """
 
 from datetime import datetime, timezone, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -98,14 +99,14 @@ class TestCalculatePortfolioValue:
             {"shares": 10, "current_price": 150.0},
             {"shares": 5, "current_price": 200.0},
         ]
-        assert _calculate_portfolio_value(holdings) == pytest.approx(2500.0)
+        assert float(_calculate_portfolio_value(holdings)) == pytest.approx(2500.0)
 
     def test_none_current_price_skipped(self):
         holdings = [
             {"shares": 10, "current_price": 150.0},
             {"shares": 5, "current_price": None},
         ]
-        assert _calculate_portfolio_value(holdings) == pytest.approx(1500.0)
+        assert float(_calculate_portfolio_value(holdings)) == pytest.approx(1500.0)
 
     def test_empty_list(self):
         assert _calculate_portfolio_value([]) == 0.0
@@ -119,7 +120,7 @@ class TestCalculateRemainingCashPct:
         result = _calculate_remaining_cash_pct(trade_value, holdings, portfolio_value)
         # cash = 2000 - 1000 = 1000, remaining = 1000 - 500 = 500
         # pct = 500 / 2000 * 100 = 25%
-        assert result == pytest.approx(25.0)
+        assert float(result) == pytest.approx(25.0)
 
     def test_zero_portfolio_value(self):
         result = _calculate_remaining_cash_pct(100.0, [], 0.0)
@@ -137,7 +138,7 @@ class TestCalculatePortfolioDrawdown:
     def test_calculates_drawdown_correctly(self):
         # Highwater = 10000, current = 8000 → 20% drawdown
         holdings = [{"shares": 80, "current_price": 100.0}]
-        assert _calculate_portfolio_drawdown(holdings, 10000.0) == pytest.approx(20.0)
+        assert float(_calculate_portfolio_drawdown(holdings, 10000.0)) == pytest.approx(20.0)
 
     def test_no_drawdown_when_above_highwater(self):
         # Current value (11000) > highwater (10000) → 0% drawdown

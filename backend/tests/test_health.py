@@ -67,9 +67,9 @@ def test_health_db_disconnected():
     client = _make_client(db_healthy=False)
     try:
         response = client.get("/health")
-        assert response.status_code == 200
+        assert response.status_code == 503
         data = response.json()
-        assert data["status"] == "degraded"
+        assert data["status"] == "unhealthy"
         assert data["database"] == "disconnected"
         assert "timestamp" in data
     finally:

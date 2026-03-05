@@ -15,9 +15,9 @@
 
 ## Batch 2: P1 Kern-Fixes
 
-- [ ] **T-004:** Float → Decimal in Finanzberechnungen
-- [ ] **T-005:** Backend Dependency Pinning (nach T-026)
-- [ ] **T-007:** Health Endpoint Readiness (503 bei DB-Down)
+- [x] **T-004:** Float → Decimal in Finanzberechnungen
+- [x] **T-005:** Backend Dependency Pinning (nach T-026)
+- [x] **T-007:** Health Endpoint Readiness (503 bei DB-Down)
 
 ## Batch 3: P1 Trade-Sicherheit → umgesetzt in Batch 2 Trade-Hardening
 
@@ -73,7 +73,7 @@
 | Batch | Tickets | Erledigt | Status |
 |-------|:-------:|:--------:|--------|
 | 1 | 5 | 5 | DONE |
-| 2 | 3 | 0 | — |
+| 2 | 3 | 3 | DONE |
 | 3 | 3 | 3 | DONE (in Batch 2 Trade-Hardening) |
 | 4 | 3 | 0 | — |
 | 5 | 3 | 0 | — |
@@ -81,4 +81,4 @@
 | 7 | 4 | 0 | — |
 | 8 | 4 | 1 | T-024 done (in Batch 2 Trade-Hardening) |
 | 9 | 7 | 0 | — |
-| **Total** | **34** | **9** | |
+| **Total** | **34** | **12** | |

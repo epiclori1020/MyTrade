@@ -18,6 +18,7 @@ Architecture:
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel
@@ -118,16 +119,20 @@ class EffectivePolicy(BaseModel):
 
 
 class TradeProposal(BaseModel):
-    """Input for Full-Policy validation."""
+    """Input for Full-Policy validation.
+
+    Financial fields (shares, price, stop_loss) use Decimal for precision.
+    Pydantic v2 auto-coerces float/int/str inputs to Decimal.
+    """
 
     ticker: str
     action: str  # "BUY" or "SELL"
-    shares: float
-    price: float
+    shares: Decimal
+    price: Decimal
     analysis_id: str
     sector: str | None = None
     is_live_order: bool = False
-    stop_loss: float | None = None
+    stop_loss: Decimal | None = None
 
 
 @dataclass
@@ -396,7 +401,7 @@ def run_full_policy(trade_proposal: TradeProposal, user_id: str) -> PolicyResult
                     f"limit of {policy.max_single_position_pct}%"
                 ),
                 severity="blocking",
-                current_value=round(position_pct, 1),
+                current_value=float(round(position_pct, 1)),
                 limit_value=policy.max_single_position_pct,
             ))
 
@@ -430,12 +435,12 @@ def run_full_policy(trade_proposal: TradeProposal, user_id: str) -> PolicyResult
     try:
         state_resp = admin.table("system_state").select("highwater_mark_value").limit(1).execute()
         highwater = (
-            float(state_resp.data[0]["highwater_mark_value"])
+            Decimal(str(state_resp.data[0]["highwater_mark_value"]))
             if state_resp.data and state_resp.data[0].get("highwater_mark_value")
-            else 0.0
+            else Decimal("0")
         )
     except Exception:
-        highwater = 0.0  # No highwater → no drawdown check (fail-open for full-policy)
+        highwater = Decimal("0")  # No highwater → no drawdown check (fail-open for full-policy)
 
     drawdown = _calculate_portfolio_drawdown(holdings, highwater)
     if drawdown >= policy.max_drawdown_pct:
@@ -446,7 +451,7 @@ def run_full_policy(trade_proposal: TradeProposal, user_id: str) -> PolicyResult
                 f"kill-switch threshold of {policy.max_drawdown_pct}%"
             ),
             severity="blocking",
-            current_value=round(drawdown, 1),
+            current_value=float(round(drawdown, 1)),
             limit_value=policy.max_drawdown_pct,
         ))
 
@@ -577,50 +582,58 @@ def _count_monthly_trades(admin, user_id: str) -> int:
 # --- Pure helpers (no DB access, testable without mocks) ---
 
 
-def _calculate_portfolio_value(holdings: list[dict]) -> float:
+def _calculate_portfolio_value(holdings: list[dict]) -> Decimal:
     """Sum of shares * current_price for all holdings.
 
-    Skips holdings with None current_price.
+    Returns Decimal for precision. Skips holdings with None current_price.
     """
-    total = 0.0
+    total = Decimal("0")
     for h in holdings:
         price = h.get("current_price")
         shares = h.get("shares")
         if price is not None and shares is not None:
-            total += float(shares) * float(price)
+            total += Decimal(str(shares)) * Decimal(str(price))
     return total
 
 
 def _calculate_remaining_cash_pct(
-    trade_value: float, holdings: list[dict], portfolio_value: float,
-) -> float:
+    trade_value: float | Decimal, holdings: list[dict], portfolio_value: float | Decimal,
+) -> Decimal:
     """Calculate remaining cash percentage after a trade.
 
+    Returns Decimal for precision. Coerces float inputs to Decimal.
     MVP simplification: Assumes no existing cash position tracked.
     Cash = portfolio_value - sum(positions) - trade_value.
     """
+    if not isinstance(trade_value, Decimal):
+        trade_value = Decimal(str(trade_value))
+    if not isinstance(portfolio_value, Decimal):
+        portfolio_value = Decimal(str(portfolio_value))
     invested = _calculate_portfolio_value(holdings)
     cash = portfolio_value - invested
     remaining_cash = cash - trade_value
     if portfolio_value == 0:
-        return 0.0
+        return Decimal("0")
     return (remaining_cash / portfolio_value) * 100
 
 
-def _calculate_portfolio_drawdown(holdings: list[dict], highwater: float) -> float:
+def _calculate_portfolio_drawdown(holdings: list[dict], highwater: float | Decimal) -> Decimal:
     """Calculate portfolio drawdown percentage from highwater mark.
 
+    Returns Decimal for precision. Coerces float highwater to Decimal.
     Pure helper — no DB access. Takes highwater as parameter.
-    Returns 0.0 if no highwater or no current value (fail-open).
+    Returns Decimal("0") if no highwater or no current value (fail-open).
     """
+    if not isinstance(highwater, Decimal):
+        highwater = Decimal(str(highwater))
     if highwater <= 0:
-        return 0.0
+        return Decimal("0")
 
     current_value = _calculate_portfolio_value(holdings)
     if current_value <= 0:
-        return 0.0
+        return Decimal("0")
 
     if current_value >= highwater:
-        return 0.0
+        return Decimal("0")
 
     return ((highwater - current_value) / highwater) * 100

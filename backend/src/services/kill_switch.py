@@ -15,6 +15,7 @@ evaluate_kill_switch_triggers() to avoid circular dependency.
 
 import logging
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from src.services.error_logger import log_error
 from src.services.supabase import get_supabase_admin
@@ -209,7 +210,7 @@ def _check_drawdown_trigger(user_id: str) -> dict:
         if state is None:
             return {"triggered": False, "detail": "Cannot read system_state"}
 
-        highwater = float(state.get("highwater_mark_value") or 0.0)
+        highwater = Decimal(str(state.get("highwater_mark_value") or 0))
         if highwater <= 0:
             return {"triggered": False, "detail": "No highwater mark set"}
 
@@ -226,9 +227,12 @@ def _check_drawdown_trigger(user_id: str) -> dict:
             return {"triggered": False, "detail": "No active holdings"}
 
         current_value = sum(
-            float(h.get("shares") or 0) * float(h.get("current_price") or 0)
-            for h in holdings
-            if h.get("current_price") is not None
+            (
+                Decimal(str(h.get("shares") or 0)) * Decimal(str(h.get("current_price") or 0))
+                for h in holdings
+                if h.get("current_price") is not None
+            ),
+            Decimal("0"),
         )
 
         if current_value <= 0:
@@ -248,10 +252,10 @@ def _check_drawdown_trigger(user_id: str) -> dict:
         triggered = drawdown >= threshold
         return {
             "triggered": triggered,
-            "drawdown_pct": round(drawdown, 2),
+            "drawdown_pct": float(round(drawdown, 2)),
             "threshold_pct": threshold,
-            "current_value": round(current_value, 2),
-            "highwater_value": highwater,
+            "current_value": float(round(current_value, 2)),
+            "highwater_value": float(highwater),
         }
     except Exception as exc:
         logger.warning("Drawdown trigger check failed: %s", exc)

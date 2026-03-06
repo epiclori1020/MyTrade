@@ -173,7 +173,7 @@ def run_claim_extraction(analysis_id: str, user_id: str) -> ClaimExtractionResul
     # Step 1: Fetch analysis_run
     run_resp = (
         admin.table("analysis_runs")
-        .select("*")
+        .select("user_id, ticker, fundamental_out, total_tokens, total_cost_usd")
         .eq("id", analysis_id)
         .execute()
     )

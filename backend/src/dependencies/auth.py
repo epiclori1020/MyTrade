@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from src.dependencies.request_context import user_id_var
 from src.services.supabase import get_supabase_client
 
 security = HTTPBearer()
@@ -52,6 +53,7 @@ def get_current_user(
 
         user_data = {"id": str(user.id), "email": user.email}
         request.state.user = user_data
+        user_id_var.set(user_data["id"])
         return user_data
 
     except HTTPException:

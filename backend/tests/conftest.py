@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from src.config import get_settings
 from src.dependencies.auth import get_current_user
+from src.dependencies.request_context import user_id_var
 from src.dependencies.rate_limit import limiter
 from src.main import app
 from tests.helpers import make_test_settings
@@ -24,6 +25,7 @@ def _fake_get_current_user(request: Request) -> dict:
     to IP-based instead of user-based (wrong behavior in tests).
     """
     request.state.user = FAKE_USER
+    user_id_var.set(FAKE_USER["id"])
     return FAKE_USER
 
 

@@ -174,7 +174,7 @@ def get_effective_policy(user_id: str) -> EffectivePolicy:
         admin = get_supabase_admin()
         resp = (
             admin.table("user_policy")
-            .select("*")
+            .select("preset_id, policy_mode, policy_overrides, cooldown_until")
             .eq("user_id", user_id)
             .execute()
         )
@@ -548,7 +548,7 @@ def _fetch_holdings(admin, user_id: str) -> list[dict]:
     try:
         resp = (
             admin.table("portfolio_holdings")
-            .select("*")
+            .select("shares, current_price")
             .eq("user_id", user_id)
             .eq("status", "active")
             .execute()

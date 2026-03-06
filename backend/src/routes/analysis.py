@@ -1,34 +1,28 @@
 """Analysis API endpoints."""
 
-import logging
 from uuid import UUID
 
 from fastapi import HTTPException, Request
 
 from src.constants import MVP_UNIVERSE, is_valid_ticker
 from src.dependencies.auth import authenticated_router
+from src.dependencies.error_handler import handle_service_errors
 from src.dependencies.rate_limit import limiter
 from src.routes.helpers import sanitize_error_message
-from src.services.exceptions import BudgetExhaustedError, ConfigurationError, PreconditionError
 from src.services.fundamental_analysis import run_fundamental_analysis
 from src.services.supabase import get_supabase_admin
-
-logger = logging.getLogger(__name__)
 
 router = authenticated_router(prefix="/api", tags=["analysis"])
 
 
 @router.post("/analyze/{ticker}")
 @limiter.limit("100/minute")
+@handle_service_errors(service_name="Analysis service")
 def analyze_ticker(ticker: str, request: Request) -> dict:
     """Run fundamental analysis for a ticker.
 
     Fetches data from DB (populated by POST /api/collect/{ticker}),
     calls the Fundamental Analyst LLM agent, and stores results.
-
-    Returns 200 with status="completed" or status="failed" (agent errors).
-    Returns 400 for invalid ticker or missing data.
-    Returns 503 for server misconfiguration.
     """
     if not is_valid_ticker(ticker):
         raise HTTPException(
@@ -38,28 +32,7 @@ def analyze_ticker(ticker: str, request: Request) -> dict:
         )
 
     user_id = request.state.user["id"]
-
-    try:
-        result = run_fundamental_analysis(ticker, user_id)
-    except PreconditionError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except BudgetExhaustedError:
-        raise HTTPException(
-            status_code=503,
-            detail="Monthly API budget exhausted. Try again next month.",
-        )
-    except ConfigurationError as exc:
-        logger.error("Configuration error: %s", exc)
-        raise HTTPException(
-            status_code=503,
-            detail="Analysis service temporarily unavailable",
-        )
-    except Exception as exc:
-        logger.error("Unexpected error analyzing %s: %s", ticker, exc, exc_info=True)
-        raise HTTPException(
-            status_code=503,
-            detail="Analysis service temporarily unavailable",
-        )
+    result = run_fundamental_analysis(ticker, user_id)
 
     return {
         "status": result.status,
@@ -74,6 +47,7 @@ def analyze_ticker(ticker: str, request: Request) -> dict:
 
 @router.get("/analyze/{analysis_id}")
 @limiter.limit("50/minute")
+@handle_service_errors(service_name="Analysis service")
 def get_analysis(analysis_id: UUID, request: Request) -> dict:
     """Retrieve a completed analysis by ID.
 
@@ -81,21 +55,14 @@ def get_analysis(analysis_id: UUID, request: Request) -> dict:
     Used by the frontend to reload a completed analysis via URL persistence.
     """
     user_id = request.state.user["id"]
-    try:
-        admin = get_supabase_admin()
-        resp = (
-            admin.table("analysis_runs")
-            .select("id, ticker, status, fundamental_out, confidence, recommendation")
-            .eq("id", str(analysis_id))
-            .eq("user_id", user_id)
-            .execute()
-        )
-    except ConfigurationError as exc:
-        logger.error("Configuration error getting analysis: %s", exc)
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
-    except Exception as exc:
-        logger.error("Unexpected error getting analysis %s: %s", analysis_id, exc, exc_info=True)
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    admin = get_supabase_admin()
+    resp = (
+        admin.table("analysis_runs")
+        .select("id, ticker, status, fundamental_out, confidence, recommendation")
+        .eq("id", str(analysis_id))
+        .eq("user_id", user_id)
+        .execute()
+    )
 
     if not resp.data:
         raise HTTPException(status_code=404, detail="Analysis not found")

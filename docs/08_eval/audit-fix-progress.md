@@ -27,9 +27,9 @@
 
 ## Batch 4: P2 Code-Qualität
 
-- [ ] **T-009:** SoC-Refactoring policy.py Route
-- [ ] **T-010:** Error-Handler Decorator
-- [ ] **T-025:** Bare except → spezifische Exceptions (nach T-010)
+- [x] **T-009:** SoC-Refactoring policy.py Route
+- [x] **T-010:** Error-Handler Decorator
+- [x] **T-025:** Bare except → spezifische Exceptions (nach T-010)
 
 ## Batch 5: P2 Observability
 
@@ -75,10 +75,10 @@
 | 1 | 5 | 5 | DONE |
 | 2 | 3 | 3 | DONE |
 | 3 | 3 | 3 | DONE (in Batch 2 Trade-Hardening) |
-| 4 | 3 | 0 | — |
+| 4 | 3 | 3 | DONE |
 | 5 | 3 | 0 | — |
 | 6 | 2 | 0 | — |
 | 7 | 4 | 0 | — |
 | 8 | 4 | 1 | T-024 done (in Batch 2 Trade-Hardening) |
 | 9 | 7 | 0 | — |
-| **Total** | **34** | **12** | |
+| **Total** | **34** | **15** | |

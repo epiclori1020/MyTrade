@@ -112,7 +112,7 @@ def _fetch_profile(finnhub: FinnhubClient, ticker: str, result: CollectionResult
     """Fetch company profile (single attempt, non-critical)."""
     try:
         return finnhub.get_profile(ticker)
-    except Exception as exc:
+    except Exception as exc:  # Broad catch: profile fetch is non-critical
         msg = f"Profile fetch failed: {exc}"
         logger.warning(msg)
         result.errors.append(msg)
@@ -203,10 +203,11 @@ def _fetch_news(
     """Fetch news (single attempt, non-critical)."""
     try:
         return finnhub.get_news(ticker)
-    except Exception as exc:
+    except Exception as exc:  # Broad catch: news fetch is non-critical
         msg = f"News fetch failed: {exc}"
         logger.warning(msg)
         result.errors.append(msg)
+        log_error("data_collector", "news_fetch_failed", str(exc))
         return []
 
 
@@ -216,10 +217,11 @@ def _fetch_insider_transactions(
     """Fetch insider transactions (single attempt, non-critical)."""
     try:
         return finnhub.get_insider_transactions(ticker)
-    except Exception as exc:
+    except Exception as exc:  # Broad catch: insider data is non-critical
         msg = f"Insider transactions fetch failed: {exc}"
         logger.warning(msg)
         result.errors.append(msg)
+        log_error("data_collector", "insider_fetch_failed", str(exc))
         return []
 
 
@@ -236,7 +238,7 @@ def _write_fundamentals(fundamentals: dict | None, result: CollectionResult) -> 
         admin.table("stock_fundamentals").upsert(
             row, on_conflict="ticker,period,source"
         ).execute()
-    except Exception as exc:
+    except Exception as exc:  # Broad catch: DB write is non-critical, collection continues
         msg = f"DB write (stock_fundamentals) failed: {exc}"
         logger.error(msg)
         result.errors.append(msg)
@@ -263,7 +265,7 @@ def _write_prices(
                 batch, on_conflict="ticker,date"
             ).execute()
             total_written += len(batch)
-        except Exception as exc:
+        except Exception as exc:  # Broad catch: batch write is non-critical, collection continues
             msg = f"DB write (stock_prices batch {i}) failed: {exc}"
             logger.error(msg)
             result.errors.append(msg)
@@ -277,7 +279,7 @@ def _write_prices(
                 row, on_conflict="ticker,date"
             ).execute()
             total_written += 1
-        except Exception as exc:
+        except Exception as exc:  # Broad catch: quote write is non-critical, collection continues
             msg = f"DB write (stock_prices quote) failed: {exc}"
             logger.error(msg)
             result.errors.append(msg)

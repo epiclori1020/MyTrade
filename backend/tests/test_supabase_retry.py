@@ -144,9 +144,10 @@ class TestFailureAndQueue:
         # The queued fn should have been called during flush (3 retries + 1 flush)
         assert fail_fn.call_count == 4
 
+    @patch("src.services.supabase_retry.logger")
     @patch("src.services.supabase_retry.log_error")
     @patch("src.services.supabase_retry.time.sleep")
-    def test_queue_flush_partial(self, mock_sleep, mock_log_error):
+    def test_queue_flush_partial(self, mock_sleep, mock_log_error, mock_logger):
         """Flush removes only items that succeed; failing items remain queued."""
         always_fail_fn = MagicMock(side_effect=RuntimeError("still down"))
         will_succeed_fn = MagicMock()
@@ -169,6 +170,13 @@ class TestFailureAndQueue:
 
         # One item flushed successfully, one remains
         assert get_queue_size() == 1
+
+        # Verify flush failure was logged (Finding 3: no silent exception swallowing)
+        warning_calls = [
+            c for c in mock_logger.warning.call_args_list
+            if "re-queuing" in str(c)
+        ]
+        assert len(warning_calls) >= 1
 
 
 # ---------------------------------------------------------------------------

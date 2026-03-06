@@ -95,7 +95,8 @@ def _flush_queue() -> int:
             try:
                 fn()
                 flushed += 1
-            except Exception:
+            except Exception as exc:  # Broad catch: failed flush items re-queued, not lost
+                logger.warning("Queued write failed during flush, re-queuing: %s", exc)
                 remaining.append(fn)
         _write_queue.extend(remaining)
 

@@ -39,7 +39,7 @@ def log_error(
     try:
         admin = get_supabase_admin()
         admin.table("error_log").insert(row).execute()
-    except Exception:
+    except Exception:  # Broad catch: error logger must never raise
         logger.error(
             "Failed to write to error_log (component=%s, type=%s): %s",
             component, error_type, truncated,

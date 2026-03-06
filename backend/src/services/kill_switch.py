@@ -31,6 +31,9 @@ VERIFICATION_RATE_THRESHOLD = 70.0
 # Number of recent analyses to evaluate for verification rate
 RECENT_ANALYSES_COUNT = 5
 
+# Default max drawdown threshold from ips-template.yaml (fallback when DB unavailable)
+DEFAULT_DRAWDOWN_PCT = 20.0
+
 
 def _read_system_state(admin) -> dict | None:
     """Read the single system_state row. Returns None on error."""
@@ -246,8 +249,11 @@ def _check_drawdown_trigger(user_id: str) -> dict:
         try:
             policy = get_effective_policy(user_id)
             threshold = policy.max_drawdown_pct
-        except Exception:
-            threshold = 20.0  # YAML fallback default
+        except Exception as exc:  # Broad catch: policy-load failure uses YAML fallback
+            logger.warning(
+                "Policy load failed for drawdown check, using fallback: %s", exc,
+            )
+            threshold = DEFAULT_DRAWDOWN_PCT
 
         triggered = drawdown >= threshold
         return {

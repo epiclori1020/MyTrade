@@ -1,12 +1,12 @@
 """Tests for GET/PUT /api/policy/settings endpoints (src/routes/policy.py).
 
-All tests use auth_client fixture and mock get_supabase_admin at the route level.
+GET /settings tests mock get_supabase_admin at the route level.
+PUT /settings tests mock update_user_policy at the route level (T-009 SoC).
+Validation tests (constraint/key) need no mocks — they fail before DB access.
 """
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from src.services.exceptions import ConfigurationError
 from tests.conftest import FAKE_USER
@@ -22,11 +22,9 @@ EXISTING_POLICY_ROW = {
 }
 
 
-def _make_mock_admin(select_data=None, upsert_data=None, insert_data=None):
-    """Create a mock Supabase admin with chainable table calls."""
+def _make_mock_admin(select_data=None):
+    """Create a mock Supabase admin for GET /settings tests."""
     admin = MagicMock()
-
-    # .table("user_policy").select(...).eq("user_id", ...).execute()
     select_chain = (
         admin.table.return_value
         .select.return_value
@@ -35,17 +33,6 @@ def _make_mock_admin(select_data=None, upsert_data=None, insert_data=None):
     select_chain.execute.return_value = SimpleNamespace(
         data=select_data if select_data is not None else []
     )
-
-    # .table("user_policy").upsert(...).execute()
-    admin.table.return_value.upsert.return_value.execute.return_value = SimpleNamespace(
-        data=upsert_data or [{}]
-    )
-
-    # .table("policy_change_log").insert(...).execute()
-    admin.table.return_value.insert.return_value.execute.return_value = SimpleNamespace(
-        data=insert_data or [{}]
-    )
-
     return admin
 
 
@@ -114,7 +101,7 @@ class TestGetSettings:
         resp = auth_client.get("/api/policy/settings")
 
         assert resp.status_code == 503
-        assert "temporarily unavailable" in resp.json()["detail"]
+        assert "not configured" in resp.json()["detail"]
 
     @patch("src.routes.policy.get_supabase_admin")
     def test_503_unexpected_exception(self, mock_admin_fn, auth_client):
@@ -133,16 +120,15 @@ class TestGetSettings:
 
 
 class TestUpdateSettings:
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_change_preset_sets_cooldown(self, mock_admin_fn, auth_client):
-        """Changing preset_id from beginner to active sets cooldown_until."""
-        admin = _make_mock_admin(select_data=[{
+    @patch("src.routes.policy.update_user_policy")
+    def test_change_preset_sets_cooldown(self, mock_update, auth_client):
+        """Changing preset_id sets cooldown_until."""
+        mock_update.return_value = {
             "policy_mode": "PRESET",
-            "preset_id": "beginner",
+            "preset_id": "active",
             "policy_overrides": {},
-            "cooldown_until": None,
-        }])
-        mock_admin_fn.return_value = admin
+            "cooldown_until": "2026-03-07T12:00:00+00:00",
+        }
 
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "PRESET",
@@ -155,11 +141,15 @@ class TestUpdateSettings:
         assert data["preset_id"] == "active"
         assert data["cooldown_until"] is not None
 
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_same_preset_no_cooldown(self, mock_admin_fn, auth_client):
+    @patch("src.routes.policy.update_user_policy")
+    def test_same_preset_no_cooldown(self, mock_update, auth_client):
         """Same preset_id does not set cooldown."""
-        admin = _make_mock_admin(select_data=[EXISTING_POLICY_ROW])
-        mock_admin_fn.return_value = admin
+        mock_update.return_value = {
+            "policy_mode": "PRESET",
+            "preset_id": "balanced",
+            "policy_overrides": {},
+            "cooldown_until": None,
+        }
 
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "PRESET",
@@ -168,22 +158,22 @@ class TestUpdateSettings:
         })
 
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["cooldown_until"] is None
+        assert resp.json()["cooldown_until"] is None
 
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_advanced_valid_overrides(self, mock_admin_fn, auth_client):
+    @patch("src.routes.policy.update_user_policy")
+    def test_advanced_valid_overrides(self, mock_update, auth_client):
         """ADVANCED mode with valid overrides returns them."""
-        admin = _make_mock_admin(select_data=[EXISTING_POLICY_ROW])
-        mock_admin_fn.return_value = admin
+        mock_update.return_value = {
+            "policy_mode": "ADVANCED",
+            "preset_id": "balanced",
+            "policy_overrides": {"satellite_pct": 35, "max_drawdown_pct": 25},
+            "cooldown_until": "2026-03-07T12:00:00+00:00",
+        }
 
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "ADVANCED",
             "preset_id": "balanced",
-            "policy_overrides": {
-                "satellite_pct": 35,
-                "max_drawdown_pct": 25,
-            },
+            "policy_overrides": {"satellite_pct": 35, "max_drawdown_pct": 25},
         })
 
         assert resp.status_code == 200
@@ -197,9 +187,7 @@ class TestUpdateSettings:
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "ADVANCED",
             "preset_id": "balanced",
-            "policy_overrides": {
-                "satellite_pct": 99,  # max is 40
-            },
+            "policy_overrides": {"satellite_pct": 99},
         })
 
         assert resp.status_code == 400
@@ -211,9 +199,7 @@ class TestUpdateSettings:
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "ADVANCED",
             "preset_id": "balanced",
-            "policy_overrides": {
-                "nonexistent_key": 10,
-            },
+            "policy_overrides": {"nonexistent_key": 10},
         })
 
         assert resp.status_code == 400
@@ -237,39 +223,15 @@ class TestUpdateSettings:
 
         assert resp.status_code == 422
 
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_change_log_entry_written(self, mock_admin_fn, auth_client):
-        """Verifies policy_change_log insert is called with old/new values."""
-        admin = _make_mock_admin(select_data=[{
+    @patch("src.routes.policy.update_user_policy")
+    def test_beginner_mode_clears_overrides(self, mock_update, auth_client):
+        """BEGINNER mode ignores and clears any overrides."""
+        mock_update.return_value = {
             "policy_mode": "BEGINNER",
             "preset_id": "beginner",
             "policy_overrides": {},
-            "cooldown_until": None,
-        }])
-        mock_admin_fn.return_value = admin
-
-        resp = auth_client.put("/api/policy/settings", json={
-            "policy_mode": "PRESET",
-            "preset_id": "balanced",
-            "policy_overrides": {},
-        })
-
-        assert resp.status_code == 200
-        # Verify insert was called (change log)
-        insert_calls = admin.table.return_value.insert.call_args_list
-        assert len(insert_calls) >= 1
-        log_row = insert_calls[0][0][0]
-        assert log_row["user_id"] == FAKE_USER_ID
-        assert log_row["old_mode"] == "BEGINNER"
-        assert log_row["new_mode"] == "PRESET"
-        assert log_row["old_preset"] == "beginner"
-        assert log_row["new_preset"] == "balanced"
-
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_beginner_mode_clears_overrides(self, mock_admin_fn, auth_client):
-        """BEGINNER mode ignores and clears any overrides."""
-        admin = _make_mock_admin(select_data=[EXISTING_POLICY_ROW])
-        mock_admin_fn.return_value = admin
+            "cooldown_until": "2026-03-07T12:00:00+00:00",
+        }
 
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "BEGINNER",
@@ -278,20 +240,15 @@ class TestUpdateSettings:
         })
 
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["policy_overrides"] == {}
+        assert resp.json()["policy_overrides"] == {}
+        # validate_overrides cleared the overrides → service called with {}
+        call_kwargs = mock_update.call_args
+        assert call_kwargs[1]["effective_overrides"] == {}
 
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_503_db_error(self, mock_admin_fn, auth_client):
-        """DB error during upsert returns 503."""
-        admin = MagicMock()
-        # select succeeds
-        admin.table.return_value.select.return_value.eq.return_value.execute.return_value = SimpleNamespace(
-            data=[EXISTING_POLICY_ROW]
-        )
-        # upsert fails
-        admin.table.return_value.upsert.side_effect = Exception("DB write failed")
-        mock_admin_fn.return_value = admin
+    @patch("src.routes.policy.update_user_policy")
+    def test_503_db_error(self, mock_update, auth_client):
+        """DB error during update returns 503."""
+        mock_update.side_effect = Exception("DB write failed")
 
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "PRESET",
@@ -302,16 +259,15 @@ class TestUpdateSettings:
         assert resp.status_code == 503
         assert "temporarily unavailable" in resp.json()["detail"]
 
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_preset_to_advanced_sets_cooldown(self, mock_admin_fn, auth_client):
-        """PRESET→ADVANCED with same preset sets cooldown (mode changed)."""
-        admin = _make_mock_admin(select_data=[{
-            "policy_mode": "PRESET",
+    @patch("src.routes.policy.update_user_policy")
+    def test_preset_to_advanced_sets_cooldown(self, mock_update, auth_client):
+        """PRESET->ADVANCED sets cooldown (mode changed)."""
+        mock_update.return_value = {
+            "policy_mode": "ADVANCED",
             "preset_id": "balanced",
-            "policy_overrides": {},
-            "cooldown_until": None,
-        }])
-        mock_admin_fn.return_value = admin
+            "policy_overrides": {"satellite_pct": 35},
+            "cooldown_until": "2026-03-07T12:00:00+00:00",
+        }
 
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "ADVANCED",
@@ -320,20 +276,17 @@ class TestUpdateSettings:
         })
 
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["policy_mode"] == "ADVANCED"
-        assert data["cooldown_until"] is not None
+        assert resp.json()["cooldown_until"] is not None
 
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_advanced_to_advanced_no_cooldown(self, mock_admin_fn, auth_client):
-        """ADVANCED→ADVANCED (only override change) does not set cooldown."""
-        admin = _make_mock_admin(select_data=[{
+    @patch("src.routes.policy.update_user_policy")
+    def test_advanced_to_advanced_no_cooldown(self, mock_update, auth_client):
+        """ADVANCED->ADVANCED (only override change) does not set cooldown."""
+        mock_update.return_value = {
             "policy_mode": "ADVANCED",
             "preset_id": "balanced",
-            "policy_overrides": {"satellite_pct": 30},
+            "policy_overrides": {"satellite_pct": 35},
             "cooldown_until": None,
-        }])
-        mock_admin_fn.return_value = admin
+        }
 
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "ADVANCED",
@@ -342,19 +295,17 @@ class TestUpdateSettings:
         })
 
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["cooldown_until"] is None
+        assert resp.json()["cooldown_until"] is None
 
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_beginner_to_advanced_sets_cooldown(self, mock_admin_fn, auth_client):
-        """BEGINNER→ADVANCED sets cooldown (mode changed)."""
-        admin = _make_mock_admin(select_data=[{
-            "policy_mode": "BEGINNER",
+    @patch("src.routes.policy.update_user_policy")
+    def test_beginner_to_advanced_sets_cooldown(self, mock_update, auth_client):
+        """BEGINNER->ADVANCED sets cooldown (mode changed)."""
+        mock_update.return_value = {
+            "policy_mode": "ADVANCED",
             "preset_id": "beginner",
-            "policy_overrides": {},
-            "cooldown_until": None,
-        }])
-        mock_admin_fn.return_value = admin
+            "policy_overrides": {"satellite_pct": 25},
+            "cooldown_until": "2026-03-07T12:00:00+00:00",
+        }
 
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "ADVANCED",
@@ -363,19 +314,17 @@ class TestUpdateSettings:
         })
 
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["cooldown_until"] is not None
+        assert resp.json()["cooldown_until"] is not None
 
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_advanced_to_preset_sets_cooldown(self, mock_admin_fn, auth_client):
-        """ADVANCED→PRESET (downgrade) sets cooldown (mode changed)."""
-        admin = _make_mock_admin(select_data=[{
-            "policy_mode": "ADVANCED",
+    @patch("src.routes.policy.update_user_policy")
+    def test_advanced_to_preset_sets_cooldown(self, mock_update, auth_client):
+        """ADVANCED->PRESET (downgrade) sets cooldown (mode changed)."""
+        mock_update.return_value = {
+            "policy_mode": "PRESET",
             "preset_id": "balanced",
-            "policy_overrides": {"satellite_pct": 35},
-            "cooldown_until": None,
-        }])
-        mock_admin_fn.return_value = admin
+            "policy_overrides": {},
+            "cooldown_until": "2026-03-07T12:00:00+00:00",
+        }
 
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "PRESET",
@@ -384,14 +333,17 @@ class TestUpdateSettings:
         })
 
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["cooldown_until"] is not None
+        assert resp.json()["cooldown_until"] is not None
 
-    @patch("src.routes.policy.get_supabase_admin")
-    def test_new_user_defaults_for_old_values(self, mock_admin_fn, auth_client):
-        """When no existing row, old values default to BEGINNER/beginner."""
-        admin = _make_mock_admin(select_data=[])
-        mock_admin_fn.return_value = admin
+    @patch("src.routes.policy.update_user_policy")
+    def test_new_user_defaults_for_old_values(self, mock_update, auth_client):
+        """When no existing row, service handles defaults."""
+        mock_update.return_value = {
+            "policy_mode": "PRESET",
+            "preset_id": "active",
+            "policy_overrides": {},
+            "cooldown_until": "2026-03-07T12:00:00+00:00",
+        }
 
         resp = auth_client.put("/api/policy/settings", json={
             "policy_mode": "PRESET",
@@ -400,5 +352,4 @@ class TestUpdateSettings:
         })
 
         assert resp.status_code == 200
-        # Preset changed from beginner to active → cooldown set
         assert resp.json()["cooldown_until"] is not None

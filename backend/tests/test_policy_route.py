@@ -73,7 +73,7 @@ class TestPreCheckEndpoint:
         resp = auth_client.post("/api/policy/pre-check/AAPL")
 
         assert resp.status_code == 503
-        assert "temporarily unavailable" in resp.json()["detail"]
+        assert "not configured" in resp.json()["detail"]
         assert "database" not in resp.json()["detail"].lower()
 
     @patch("src.routes.policy.run_pre_policy")
@@ -158,7 +158,7 @@ class TestFullCheckEndpoint:
         resp = auth_client.post("/api/policy/full-check", json=self.TRADE_PROPOSAL)
 
         assert resp.status_code == 503
-        assert "temporarily unavailable" in resp.json()["detail"]
+        assert "not configured" in resp.json()["detail"]
 
     @patch("src.routes.policy.run_full_policy")
     def test_503_unexpected_exception(self, mock_run, auth_client):
@@ -205,7 +205,7 @@ class TestEffectiveEndpoint:
         resp = auth_client.get("/api/policy/effective")
 
         assert resp.status_code == 503
-        assert "temporarily unavailable" in resp.json()["detail"]
+        assert "not configured" in resp.json()["detail"]
 
     @patch("src.routes.policy.get_effective_policy")
     def test_503_unexpected_exception(self, mock_get_policy, auth_client):

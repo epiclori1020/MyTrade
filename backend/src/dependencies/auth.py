@@ -56,7 +56,7 @@ def get_current_user(
 
     except HTTPException:
         raise
-    except Exception:
+    except Exception:  # Broad catch: any auth failure = 401
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired token",

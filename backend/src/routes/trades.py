@@ -1,15 +1,14 @@
 """Trade API endpoints — propose, approve, reject, list, positions, account."""
 
-import logging
 from uuid import UUID
 
 from fastapi import HTTPException, Query, Request
 from pydantic import BaseModel
 
 from src.dependencies.auth import authenticated_router
+from src.dependencies.error_handler import handle_service_errors
 from src.dependencies.rate_limit import limiter
 from src.services.alpaca_paper import get_broker_adapter
-from src.services.exceptions import BrokerError, CircuitBreakerOpenError, ConfigurationError, PreconditionError
 from src.services.kill_switch import is_kill_switch_active
 from src.services.policy_engine import TradeProposal, run_full_policy
 from src.services.supabase import get_supabase_admin
@@ -19,8 +18,6 @@ from src.services.trade_execution import (
     reject_trade,
     run_lazy_maintenance,
 )
-
-logger = logging.getLogger(__name__)
 
 router = authenticated_router(prefix="/api/trades", tags=["trades"])
 
@@ -37,6 +34,7 @@ class RejectBody(BaseModel):
 
 @router.post("/propose")
 @limiter.limit("50/minute")
+@handle_service_errors(service_name="Trade service")
 def propose(request: Request, trade_proposal: TradeProposal) -> dict:
     """Create a trade proposal after Kill-Switch + Full-Policy checks.
 
@@ -57,20 +55,7 @@ def propose(request: Request, trade_proposal: TradeProposal) -> dict:
         )
 
     # --- Gate 2: Full-Policy ---
-    try:
-        policy_result = run_full_policy(trade_proposal, user_id)
-    except ConfigurationError as exc:
-        logger.error("Policy engine configuration error: %s", exc)
-        raise HTTPException(
-            status_code=503,
-            detail="Policy service not configured",
-        )
-    except Exception as exc:
-        logger.error("Policy engine error: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=503,
-            detail="Policy service temporarily unavailable",
-        )
+    policy_result = run_full_policy(trade_proposal, user_id)
 
     if not policy_result.passed:
         raise HTTPException(
@@ -89,20 +74,7 @@ def propose(request: Request, trade_proposal: TradeProposal) -> dict:
         )
 
     # --- Gate passed: write trade proposal ---
-    try:
-        row = propose_trade(user_id, trade_proposal)
-    except ConfigurationError as exc:
-        logger.error("Configuration error in propose: %s", exc)
-        raise HTTPException(
-            status_code=503,
-            detail="Trade service not configured",
-        )
-    except Exception as exc:
-        logger.error("Unexpected error in propose: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=503,
-            detail="Trade service temporarily unavailable",
-        )
+    row = propose_trade(user_id, trade_proposal)
 
     return {
         "trade_id": row["id"],
@@ -117,6 +89,7 @@ def propose(request: Request, trade_proposal: TradeProposal) -> dict:
 
 @router.post("/{trade_id}/approve")
 @limiter.limit("50/minute")
+@handle_service_errors(service_name="Trade service", precondition_status=404)
 def approve(trade_id: UUID, request: Request) -> dict:
     """User approves a proposed trade -> executes via broker.
 
@@ -139,40 +112,13 @@ def approve(trade_id: UUID, request: Request) -> dict:
             detail="System is paused — Kill-Switch is active",
         )
 
-    try:
-        result = approve_trade(str(trade_id), user_id)
-    except PreconditionError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except ConfigurationError as exc:
-        logger.error("Configuration error in approve: %s", exc)
-        raise HTTPException(
-            status_code=503,
-            detail="Broker service not configured",
-        )
-    except CircuitBreakerOpenError as exc:  # Defense-in-depth: approve_trade() catches this, kept as safety net
-        logger.warning("Circuit breaker open in approve (defense-in-depth): %s", exc)
-        raise HTTPException(
-            status_code=503,
-            detail="Broker temporarily unavailable — circuit breaker active",
-        )
-    except BrokerError as exc:
-        logger.error("Broker error in approve: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail="Broker temporarily unavailable",
-        )
-    except Exception as exc:
-        logger.error("Unexpected error in approve: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=503,
-            detail="Trade service temporarily unavailable",
-        )
-
+    result = approve_trade(str(trade_id), user_id)
     return result
 
 
 @router.post("/{trade_id}/reject")
 @limiter.limit("50/minute")
+@handle_service_errors(service_name="Trade service", precondition_status=404)
 def reject(trade_id: UUID, request: Request, body: RejectBody | None = None) -> dict:
     """User rejects a proposed trade.
 
@@ -181,23 +127,13 @@ def reject(trade_id: UUID, request: Request, body: RejectBody | None = None) -> 
     """
     user_id = request.state.user["id"]
     reason = body.reason if body else None
-
-    try:
-        result = reject_trade(str(trade_id), user_id, reason)
-    except PreconditionError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except Exception as exc:
-        logger.error("Unexpected error in reject: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=503,
-            detail="Trade service temporarily unavailable",
-        )
-
+    result = reject_trade(str(trade_id), user_id, reason)
     return result
 
 
 @router.get("")
 @limiter.limit("100/minute")
+@handle_service_errors(service_name="Trade service")
 def list_trades(
     request: Request,
     status: str | None = Query(default=None, description="Filter by status"),
@@ -219,55 +155,30 @@ def list_trades(
     # Lazy maintenance before listing
     run_lazy_maintenance()
 
-    try:
-        admin = get_supabase_admin()
-        query = (
-            admin.table("trade_log")
-            .select("*")
-            .eq("user_id", user_id)
-            .order("proposed_at", desc=True)
-        )
-        if status:
-            query = query.eq("status", status)
-        resp = query.execute()
-    except Exception as exc:
-        logger.error("Unexpected error listing trades: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=503,
-            detail="Trade service temporarily unavailable",
-        )
+    admin = get_supabase_admin()
+    query = (
+        admin.table("trade_log")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("proposed_at", desc=True)
+    )
+    if status:
+        query = query.eq("status", status)
+    resp = query.execute()
 
     return {"trades": resp.data or []}
 
 
 @router.get("/positions")
 @limiter.limit("30/minute")
+@handle_service_errors(service_name="Trade service")
 def get_positions(request: Request) -> dict:
     """Get current positions from broker (Paper Trading).
 
     Returns: {positions: [{ticker, shares, avg_price, current_price, market_value}]}
     """
-    try:
-        adapter = get_broker_adapter()
-        positions = adapter.get_positions()
-    except ConfigurationError as exc:
-        logger.error("Configuration error getting positions: %s", exc)
-        raise HTTPException(
-            status_code=503,
-            detail="Broker service not configured",
-        )
-    except BrokerError as exc:
-        logger.error("Broker error getting positions: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail="Broker temporarily unavailable",
-        )
-    except Exception as exc:
-        logger.error("Unexpected error getting positions: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=503,
-            detail="Trade service temporarily unavailable",
-        )
+    adapter = get_broker_adapter()
+    positions = adapter.get_positions()
 
     return {
         "positions": [
@@ -285,32 +196,14 @@ def get_positions(request: Request) -> dict:
 
 @router.get("/account")
 @limiter.limit("30/minute")
+@handle_service_errors(service_name="Trade service")
 def get_account(request: Request) -> dict:
     """Get broker account info (Paper Trading).
 
     Returns: {total_value, cash, buying_power}
     """
-    try:
-        adapter = get_broker_adapter()
-        account = adapter.get_account()
-    except ConfigurationError as exc:
-        logger.error("Configuration error getting account: %s", exc)
-        raise HTTPException(
-            status_code=503,
-            detail="Broker service not configured",
-        )
-    except BrokerError as exc:
-        logger.error("Broker error getting account: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail="Broker temporarily unavailable",
-        )
-    except Exception as exc:
-        logger.error("Unexpected error getting account: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=503,
-            detail="Trade service temporarily unavailable",
-        )
+    adapter = get_broker_adapter()
+    account = adapter.get_account()
 
     return {
         "total_value": account.total_value,

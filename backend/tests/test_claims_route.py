@@ -99,7 +99,7 @@ class TestExtractClaimsEndpoint:
 
         assert resp.status_code == 503
         assert "ANTHROPIC_API_KEY" not in resp.json()["detail"]
-        assert "temporarily unavailable" in resp.json()["detail"]
+        assert "not configured" in resp.json()["detail"]
 
     @patch("src.routes.claims.run_claim_extraction")
     def test_unexpected_error_returns_503_sanitized(self, mock_run, auth_client):

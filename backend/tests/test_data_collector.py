@@ -138,6 +138,13 @@ class TestCollectTickerData:
         assert result.fundamentals is not None
         assert result.news == []
 
+        # Verify log_error was called for news failure (consistent with _fetch_profile)
+        log_error_calls = [
+            c for c in mock_log_error.call_args_list
+            if c[0][1] == "news_fetch_failed"
+        ]
+        assert len(log_error_calls) == 1
+
     def test_db_write_failure(self, MockFinnhub, MockAV, mock_log_error, mock_admin):
         """DB write failure should be logged but not crash."""
         finnhub = MockFinnhub.return_value

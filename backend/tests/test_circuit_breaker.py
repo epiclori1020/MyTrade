@@ -937,7 +937,7 @@ class TestCircuitBreakerPersistence:
             breaker.check()  # half_open
 
         # Probe fails -> back to open
-        with patch("src.services.circuit_breaker.activate_kill_switch", create=True):
+        with patch("src.services.kill_switch.activate_kill_switch"):
             breaker.record_failure()
         mock_persist.assert_called_once()
 
@@ -979,7 +979,7 @@ class TestCircuitBreakerPersistence:
     def test_restore_open_state(self, mock_admin_fn):
         """restore_alpaca_cb sets breaker to open when DB says open."""
         admin = MagicMock()
-        admin.table.return_value.select.return_value.limit.return_value.execute.return_value = MagicMock(
+        admin.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
             data=[{"cb_state": "open", "cb_failure_count": 7, "cb_last_failure_time": 100.0}]
         )
         mock_admin_fn.return_value = admin
@@ -995,7 +995,7 @@ class TestCircuitBreakerPersistence:
     def test_restore_closed_is_noop(self, mock_admin_fn):
         """restore_alpaca_cb does nothing when persisted state is closed."""
         admin = MagicMock()
-        admin.table.return_value.select.return_value.limit.return_value.execute.return_value = MagicMock(
+        admin.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
             data=[{"cb_state": "closed", "cb_failure_count": 0, "cb_last_failure_time": 0.0}]
         )
         mock_admin_fn.return_value = admin
@@ -1008,7 +1008,7 @@ class TestCircuitBreakerPersistence:
     def test_restore_empty_db_is_noop(self, mock_admin_fn):
         """restore_alpaca_cb does nothing when system_state has no rows."""
         admin = MagicMock()
-        admin.table.return_value.select.return_value.limit.return_value.execute.return_value = MagicMock(
+        admin.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
             data=[]
         )
         mock_admin_fn.return_value = admin

@@ -224,6 +224,7 @@ def restore_alpaca_cb() -> None:
         resp = (
             admin.table("system_state")
             .select("cb_state, cb_failure_count, cb_last_failure_time")
+            .eq("id", SYSTEM_STATE_ID)
             .limit(1)
             .execute()
         )

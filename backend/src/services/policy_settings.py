@@ -4,13 +4,10 @@ Extracted from routes/policy.py (T-009 SoC refactoring).
 The route handler validates input (Pydantic) and calls these functions.
 """
 
-import logging
 from datetime import datetime, timedelta, timezone
 
 from src.services.policy_engine import CONSTRAINTS
 from src.services.supabase import get_supabase_admin
-
-logger = logging.getLogger(__name__)
 
 
 class OverrideValidationError(ValueError):

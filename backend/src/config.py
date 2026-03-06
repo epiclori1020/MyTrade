@@ -47,8 +47,20 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        """Split comma-separated CORS origins into a list."""
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        """Split comma-separated CORS origins into a list.
+
+        Raises ValueError if any origin contains a wildcard — allow_credentials=True
+        requires explicit origins per the CORS spec.
+        """
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        if any("*" in o for o in origins):
+            raise ValueError(
+                "CORS wildcard (*) is not allowed — "
+                "allow_credentials=True requires explicit origins. "
+                "Set CORS_ORIGINS to specific domains "
+                "(e.g. 'http://localhost:3000,https://mytrade.vercel.app')"
+            )
+        return origins
 
     @property
     def admin_user_id_list(self) -> list[str]:

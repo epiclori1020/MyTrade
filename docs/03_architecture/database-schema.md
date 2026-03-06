@@ -24,7 +24,7 @@ Alle persistenten Daten leben in PostgreSQL via Supabase. Alle Tabellen sind üb
 | `macro_indicators` | Makrodaten (GDP, CPI, etc.) | Dieses Dokument |
 | `error_log` | System-Fehler | Dieses Dokument |
 | `agent_cost_log` | API-Kosten-Tracking | Dieses Dokument |
-| `learning_progress` | Lern-Modus Fortschritt | Dieses Dokument |
+| `learning_progress` | ~~Lern-Modus Fortschritt~~ **FUTURE — nicht im MVP implementiert** | Dieses Dokument |
 
 ---
 
@@ -289,7 +289,7 @@ CREATE TABLE agent_cost_log (
   degraded BOOLEAN DEFAULT false                           -- true = Budget-Fallback aktiv
 );
 
--- Lern-Modus Fortschritt
+-- FUTURE: Lern-Modus Fortschritt (nicht im MVP implementiert, keine Migration vorhanden)
 CREATE TABLE learning_progress (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id),

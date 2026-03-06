@@ -33,9 +33,9 @@
 
 ## Batch 5: P2 Observability
 
-- [ ] **T-013:** SELECT(*) → explizite Spalten
-- [ ] **T-014:** Strukturiertes Logging
-- [ ] **T-012:** Graceful Shutdown
+- [x] **T-013:** SELECT(*) → explizite Spalten
+- [x] **T-014:** Strukturiertes Logging
+- [x] **T-012:** Graceful Shutdown
 
 ## Batch 6: P2 Frontend + Testing
 
@@ -76,9 +76,9 @@
 | 2 | 3 | 3 | DONE |
 | 3 | 3 | 3 | DONE (in Batch 2 Trade-Hardening) |
 | 4 | 3 | 3 | DONE |
-| 5 | 3 | 0 | — |
+| 5 | 3 | 3 | DONE |
 | 6 | 2 | 0 | — |
 | 7 | 4 | 0 | — |
 | 8 | 4 | 1 | T-024 done (in Batch 2 Trade-Hardening) |
 | 9 | 7 | 0 | — |
-| **Total** | **34** | **15** | |
+| **Total** | **34** | **18** | |

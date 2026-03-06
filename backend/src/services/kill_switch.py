@@ -38,7 +38,12 @@ DEFAULT_DRAWDOWN_PCT = 20.0
 def _read_system_state(admin) -> dict | None:
     """Read the single system_state row. Returns None on error."""
     try:
-        resp = admin.table("system_state").select("*").limit(1).execute()
+        resp = (
+            admin.table("system_state")
+            .select("kill_switch_active, kill_switch_reason, kill_switch_activated_at, highwater_mark_value")
+            .limit(1)
+            .execute()
+        )
         return resp.data[0] if resp.data else None
     except Exception as exc:
         logger.error("Failed to read system_state: %s", exc)

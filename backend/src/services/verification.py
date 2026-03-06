@@ -230,7 +230,10 @@ def run_verification(analysis_id: str, user_id: str) -> VerificationResult:
 
     # 1. Fetch analysis_run
     run_resp = (
-        admin.table("analysis_runs").select("*").eq("id", analysis_id).execute()
+        admin.table("analysis_runs")
+        .select("user_id, ticker")
+        .eq("id", analysis_id)
+        .execute()
     )
     if not run_resp.data:
         raise PreconditionError("Analysis run not found")
@@ -243,7 +246,10 @@ def run_verification(analysis_id: str, user_id: str) -> VerificationResult:
 
     # 3. Fetch claims
     claims_resp = (
-        admin.table("claims").select("*").eq("analysis_id", analysis_id).execute()
+        admin.table("claims")
+        .select("id, claim_type, claim_text, value, trade_critical")
+        .eq("analysis_id", analysis_id)
+        .execute()
     )
     if not claims_resp.data:
         raise PreconditionError("No claims found for this analysis")

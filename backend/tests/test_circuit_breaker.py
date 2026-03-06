@@ -23,6 +23,8 @@ from src.services.circuit_breaker import (
     alpha_vantage_breaker,
     alpaca_breaker,
     finnhub_breaker,
+    persist_alpaca_cb,
+    restore_alpaca_cb,
 )
 from src.services.exceptions import CircuitBreakerOpenError
 
@@ -657,10 +659,11 @@ class TestKillSwitchBridge:
     """When Alpaca circuit breaker transitions to open, it must activate the kill-switch.
     Non-Alpaca breakers (finnhub, alpha_vantage) must NOT trigger kill-switch."""
 
+    @patch("src.services.circuit_breaker.persist_alpaca_cb")
     @patch("src.services.kill_switch.activate_kill_switch")
     @patch("src.services.circuit_breaker.log_error")
     def test_alpaca_closed_to_open_activates_kill_switch(
-        self, mock_log_error, mock_ks_activate
+        self, mock_log_error, mock_ks_activate, _mock_persist
     ):
         """Alpaca CB closed->open must call activate_kill_switch('auto_broker_cb')."""
         breaker = CircuitBreaker("alpaca")
@@ -668,8 +671,11 @@ class TestKillSwitchBridge:
 
         mock_ks_activate.assert_called_once_with("auto_broker_cb")
 
+    @patch("src.services.circuit_breaker.persist_alpaca_cb")
     @patch("src.services.circuit_breaker.log_error")
-    def test_alpaca_half_open_to_open_activates_kill_switch(self, mock_log_error):
+    def test_alpaca_half_open_to_open_activates_kill_switch(
+        self, mock_log_error, _mock_persist
+    ):
         """Alpaca CB half_open->open (probe failed) must also activate kill-switch."""
         breaker = CircuitBreaker("alpaca")
 
@@ -714,8 +720,11 @@ class TestKillSwitchBridge:
             _open_breaker(breaker)
             mock_ks.assert_not_called()
 
+    @patch("src.services.circuit_breaker.persist_alpaca_cb")
     @patch("src.services.circuit_breaker.log_error")
-    def test_kill_switch_failure_does_not_crash_cb(self, mock_log_error):
+    def test_kill_switch_failure_does_not_crash_cb(
+        self, mock_log_error, _mock_persist
+    ):
         """If kill-switch activation fails, CB must still transition to open
         without raising an exception."""
         breaker = CircuitBreaker("alpaca")
@@ -874,3 +883,142 @@ class TestHalfOpenProbeConcurrency:
 
         # Circuit works normally again
         breaker.check()  # closed — must not raise
+
+
+# ---------------------------------------------------------------------------
+# T-017: Circuit Breaker Persistence
+# ---------------------------------------------------------------------------
+
+
+class TestCircuitBreakerPersistence:
+    """T-017: CB state persistence to system_state and restore on startup."""
+
+    def setup_method(self):
+        alpaca_breaker.reset()
+
+    @patch("src.services.circuit_breaker.persist_alpaca_cb")
+    @patch("src.services.circuit_breaker.log_error")
+    def test_persist_called_on_closed_to_open(self, mock_log_error, mock_persist):
+        """When alpaca CB transitions closed->open, persist is called."""
+        breaker = CircuitBreaker("alpaca")
+        _open_breaker(breaker)
+        mock_persist.assert_called_once()
+
+    @patch("src.services.circuit_breaker.persist_alpaca_cb")
+    @patch("src.services.circuit_breaker.log_error")
+    def test_persist_called_on_half_open_to_closed(self, mock_log_error, mock_persist):
+        """When probe succeeds (half_open->closed), persist is called."""
+        breaker = CircuitBreaker("alpaca")
+
+        with patch("src.services.circuit_breaker.time.monotonic", return_value=1000.0):
+            _open_breaker(breaker)
+        mock_persist.reset_mock()
+
+        with patch("src.services.circuit_breaker.time.monotonic",
+                    return_value=1000.0 + OPEN_TIMEOUT):
+            breaker.check()  # half_open
+
+        breaker.record_success()
+        mock_persist.assert_called_once()
+
+    @patch("src.services.circuit_breaker.persist_alpaca_cb")
+    @patch("src.services.circuit_breaker.log_error")
+    def test_persist_called_on_half_open_to_open(self, mock_log_error, mock_persist):
+        """When probe fails (half_open->open), persist is called."""
+        breaker = CircuitBreaker("alpaca")
+
+        with patch("src.services.circuit_breaker.time.monotonic", return_value=1000.0):
+            _open_breaker(breaker)
+        mock_persist.reset_mock()
+
+        # Transition to half_open
+        with patch("src.services.circuit_breaker.time.monotonic",
+                    return_value=1000.0 + OPEN_TIMEOUT):
+            breaker.check()  # half_open
+
+        # Probe fails -> back to open
+        with patch("src.services.circuit_breaker.activate_kill_switch", create=True):
+            breaker.record_failure()
+        mock_persist.assert_called_once()
+
+    @patch("src.services.circuit_breaker.log_error")
+    def test_finnhub_breaker_does_not_persist(self, mock_log_error):
+        """Non-alpaca breakers must NOT call persist."""
+        breaker = CircuitBreaker("finnhub")
+        with patch("src.services.circuit_breaker.persist_alpaca_cb") as mock_persist:
+            _open_breaker(breaker)
+            mock_persist.assert_not_called()
+
+    @patch("src.services.supabase.get_supabase_admin")
+    def test_persist_writes_state_to_db(self, mock_admin_fn):
+        """persist_alpaca_cb writes current state to system_state."""
+        admin = MagicMock()
+        mock_admin_fn.return_value = admin
+
+        with alpaca_breaker._lock:
+            alpaca_breaker._state = "open"
+            alpaca_breaker._failure_count = 5
+            alpaca_breaker._last_failure_time = 123.4
+
+        persist_alpaca_cb()
+
+        update_call = admin.table.return_value.update
+        update_call.assert_called_once()
+        call_args = update_call.call_args[0][0]
+        assert call_args["cb_state"] == "open"
+        assert call_args["cb_failure_count"] == 5
+        assert call_args["cb_last_failure_time"] == 123.4
+
+    @patch("src.services.supabase.get_supabase_admin")
+    def test_persist_failure_does_not_raise(self, mock_admin_fn):
+        """persist_alpaca_cb is best-effort — DB failure must not crash."""
+        mock_admin_fn.side_effect = Exception("DB down")
+        persist_alpaca_cb()  # Must not raise
+
+    @patch("src.services.supabase.get_supabase_admin")
+    def test_restore_open_state(self, mock_admin_fn):
+        """restore_alpaca_cb sets breaker to open when DB says open."""
+        admin = MagicMock()
+        admin.table.return_value.select.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[{"cb_state": "open", "cb_failure_count": 7, "cb_last_failure_time": 100.0}]
+        )
+        mock_admin_fn.return_value = admin
+
+        alpaca_breaker.reset()
+        restore_alpaca_cb()
+
+        state = alpaca_breaker.get_state()
+        assert state["state"] == "open"
+        assert state["failure_count"] == 7
+
+    @patch("src.services.supabase.get_supabase_admin")
+    def test_restore_closed_is_noop(self, mock_admin_fn):
+        """restore_alpaca_cb does nothing when persisted state is closed."""
+        admin = MagicMock()
+        admin.table.return_value.select.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[{"cb_state": "closed", "cb_failure_count": 0, "cb_last_failure_time": 0.0}]
+        )
+        mock_admin_fn.return_value = admin
+
+        alpaca_breaker.reset()
+        restore_alpaca_cb()
+        assert alpaca_breaker.get_state()["state"] == "closed"
+
+    @patch("src.services.supabase.get_supabase_admin")
+    def test_restore_empty_db_is_noop(self, mock_admin_fn):
+        """restore_alpaca_cb does nothing when system_state has no rows."""
+        admin = MagicMock()
+        admin.table.return_value.select.return_value.limit.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+        mock_admin_fn.return_value = admin
+
+        alpaca_breaker.reset()
+        restore_alpaca_cb()
+        assert alpaca_breaker.get_state()["state"] == "closed"
+
+    @patch("src.services.supabase.get_supabase_admin")
+    def test_restore_failure_does_not_raise(self, mock_admin_fn):
+        """restore_alpaca_cb is best-effort — DB failure must not crash."""
+        mock_admin_fn.side_effect = Exception("DB down")
+        restore_alpaca_cb()  # Must not raise

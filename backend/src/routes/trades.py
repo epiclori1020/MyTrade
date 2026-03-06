@@ -166,7 +166,8 @@ def list_trades(
         query = query.eq("status", status)
     resp = query.execute()
 
-    return {"trades": resp.data or []}
+    trades = resp.data or []
+    return {"trades": trades, "count": len(trades)}
 
 
 @router.get("/positions")
@@ -180,18 +181,17 @@ def get_positions(request: Request) -> dict:
     adapter = get_broker_adapter()
     positions = adapter.get_positions()
 
-    return {
-        "positions": [
-            {
-                "ticker": p.ticker,
-                "shares": p.shares,
-                "avg_price": p.avg_price,
-                "current_price": p.current_price,
-                "market_value": p.market_value,
-            }
-            for p in positions
-        ],
-    }
+    positions_list = [
+        {
+            "ticker": p.ticker,
+            "shares": p.shares,
+            "avg_price": p.avg_price,
+            "current_price": p.current_price,
+            "market_value": p.market_value,
+        }
+        for p in positions
+    ]
+    return {"positions": positions_list, "count": len(positions_list)}
 
 
 @router.get("/account")

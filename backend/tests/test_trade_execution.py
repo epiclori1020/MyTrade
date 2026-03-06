@@ -98,6 +98,13 @@ def _mock_admin_table():
         chain_lt = chain_eq.lt.return_value
         chain_lt.execute.return_value = SimpleNamespace(data=[])
 
+        # .select(...).eq().eq().eq().eq().eq().execute() — for propose_trade idempotency check (5-eq chain)
+        # Default: no existing proposal → proceeds to INSERT
+        eq5 = mock_table.select.return_value
+        for _ in range(5):
+            eq5 = eq5.eq.return_value
+        eq5.execute.return_value = SimpleNamespace(data=[])
+
         tables[name] = mock_table
         return mock_table
 
@@ -216,6 +223,64 @@ class TestProposeTrade:
 
         with pytest.raises(RuntimeError, match="Failed to create trade proposal"):
             propose_trade(FAKE_USER_ID, _make_trade_proposal())
+
+
+class TestProposeTradeIdempotency:
+    """T-023: Idempotency for trade proposals."""
+
+    @patch("src.services.trade_execution.get_supabase_admin")
+    def test_duplicate_proposal_returns_existing(self, mock_admin_fn):
+        """Second proposal with same (user, analysis, ticker, action, proposed) returns existing."""
+        admin = _mock_admin_table()
+        existing_row = {
+            "id": "existing-trade-1",
+            "status": "proposed",
+            "ticker": "AAPL",
+            "action": "BUY",
+            "shares": 10.0,
+            "price": 150.0,
+            "proposed_at": "2026-01-01T00:00:00Z",
+        }
+        # Override the 5-eq chain to return an existing row
+        trade_table = admin.table("trade_log")
+        eq5 = trade_table.select.return_value
+        for _ in range(5):
+            eq5 = eq5.eq.return_value
+        eq5.execute.return_value = SimpleNamespace(data=[existing_row])
+        mock_admin_fn.return_value = admin
+
+        proposal = _make_trade_proposal()
+        result = propose_trade(FAKE_USER_ID, proposal)
+
+        assert result["id"] == "existing-trade-1"
+        # INSERT should NOT have been called
+        trade_table.insert.assert_not_called()
+
+    @patch("src.services.trade_execution.get_supabase_admin")
+    def test_no_duplicate_proceeds_to_insert(self, mock_admin_fn):
+        """When no existing proposed trade, INSERT proceeds normally."""
+        admin = _mock_admin_table()
+        mock_admin_fn.return_value = admin
+
+        proposal = _make_trade_proposal()
+        result = propose_trade(FAKE_USER_ID, proposal)
+
+        # INSERT was called (via default mock factory)
+        assert result["id"] == FAKE_TRADE_ID
+        admin.table("trade_log").insert.assert_called_once()
+
+    @patch("src.services.trade_execution.get_supabase_admin")
+    def test_rejected_trade_allows_new_proposal(self, mock_admin_fn):
+        """After reject, a new proposal for the same analysis+ticker+action is allowed."""
+        admin = _mock_admin_table()
+        # 5-eq chain returns empty — no 'proposed' trade exists (the old one is 'rejected')
+        mock_admin_fn.return_value = admin
+
+        proposal = _make_trade_proposal()
+        result = propose_trade(FAKE_USER_ID, proposal)
+
+        assert result["id"] == FAKE_TRADE_ID
+        admin.table("trade_log").insert.assert_called_once()
 
 
 # ============================================================

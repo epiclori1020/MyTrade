@@ -48,9 +48,32 @@ def propose_trade(user_id: str, trade_proposal) -> dict:
     Called AFTER Full-Policy has passed. TradeProposal fields `sector`
     and `is_live_order` are policy-only — not written to trade_log.
 
+    Idempotency: rejects duplicate proposals (same user + analysis + ticker +
+    action + status='proposed'). Returns existing row on conflict.
+
     Returns: trade_log row dict (including generated id).
     """
     admin = get_supabase_admin()
+
+    # --- Idempotency check: prevent duplicate proposed trades ---
+    existing = (
+        admin.table("trade_log")
+        .select("id, status, ticker, action, shares, price, proposed_at")
+        .eq("user_id", user_id)
+        .eq("analysis_id", trade_proposal.analysis_id)
+        .eq("ticker", trade_proposal.ticker)
+        .eq("action", trade_proposal.action.upper())
+        .eq("status", "proposed")
+        .execute()
+    )
+    if existing.data:
+        logger.info(
+            "Duplicate proposal blocked for user %s, analysis %s, %s %s",
+            user_id, trade_proposal.analysis_id,
+            trade_proposal.action, trade_proposal.ticker,
+        )
+        return existing.data[0]
+
     row = {
         "user_id": user_id,
         "analysis_id": trade_proposal.analysis_id,
@@ -120,7 +143,14 @@ def approve_trade(trade_id: str, user_id: str) -> dict:
     if not update_resp.data:
         raise PreconditionError("Trade is not in proposed status")
 
-    # Execute via broker
+    return _execute_broker_order(trade, trade_id, admin)
+
+
+def _execute_broker_order(trade: dict, trade_id: str, admin) -> dict:
+    """Build order from trade row, submit to broker, update trade_log.
+
+    Returns response dict with trade_id, status, and optional fields.
+    """
     order = Order(
         ticker=trade["ticker"],
         action=trade["action"],

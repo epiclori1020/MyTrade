@@ -499,6 +499,7 @@ class TestListTradesEndpoint:
         data = resp.json()
         assert "trades" in data
         assert len(data["trades"]) == 2
+        assert data["count"] == 2
         mock_maint.assert_called_once()
 
     @patch("src.routes.trades.run_lazy_maintenance")
@@ -513,6 +514,7 @@ class TestListTradesEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["trades"] == []
+        assert data["count"] == 0
 
     @patch("src.routes.trades.run_lazy_maintenance")
     @patch("src.routes.trades.get_supabase_admin")
@@ -593,6 +595,7 @@ class TestGetPositionsEndpoint:
         data = resp.json()
         assert "positions" in data
         assert len(data["positions"]) == 2
+        assert data["count"] == 2
         first = data["positions"][0]
         assert first["ticker"] == "AAPL"
         assert first["shares"] == 10.0
@@ -690,3 +693,26 @@ class TestUUIDValidation:
         resp = auth_client.post("/api/trades/not-a-valid-uuid/approve")
 
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Error Response Envelope (T-033)
+# ---------------------------------------------------------------------------
+
+
+class TestErrorResponseEnvelope:
+    """Verify that error responses include request_id from middleware."""
+
+    def test_404_includes_request_id(self, auth_client):
+        """Error responses include request_id from middleware."""
+        resp = auth_client.get("/api/nonexistent-route")
+        assert resp.status_code == 404
+        data = resp.json()
+        assert "request_id" in data
+        assert data["request_id"] is not None
+
+    def test_422_includes_request_id(self, auth_client):
+        resp = auth_client.post("/api/trades/not-a-valid-uuid/approve")
+        assert resp.status_code == 422
+        data = resp.json()
+        assert "request_id" in data

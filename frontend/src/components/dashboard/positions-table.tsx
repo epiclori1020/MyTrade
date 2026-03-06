@@ -23,8 +23,8 @@ export function PositionsTable() {
 
   useEffect(() => {
     api
-      .get<Position[]>("/api/trades/positions")
-      .then(setPositions)
+      .get<{ positions: Position[]; count?: number }>("/api/trades/positions")
+      .then((data) => setPositions(data.positions))
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Fehler beim Laden"),
       )

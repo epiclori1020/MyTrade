@@ -227,7 +227,70 @@ def run_verification(analysis_id: str, user_id: str) -> VerificationResult:
     admin = get_supabase_admin()
 
     # --- Phase A: Pre-Condition Checks ---
+    ticker, claims_rows = _verify_preconditions(admin, analysis_id, user_id)
 
+    # --- Phase B: Execution ---
+
+    # Fetch AV data with retry (graceful degradation on failure)
+    av_data = None
+    client = AlphaVantageClient()
+    try:
+        av_data = retry_with_backoff(
+            lambda: client.get_fundamentals(ticker),
+            max_retries=2,  # 1 initial + 1 retry (AV has 25/day limit)
+            provider="alpha_vantage",
+            on_error=lambda exc, attempt: log_error(
+                component="verification",
+                error_type="av_fetch_failed",
+                message=f"AV attempt {attempt}: {exc}",
+                analysis_id=analysis_id,
+            ),
+        )
+    except DataProviderError as exc:
+        log_error(
+            component="verification",
+            error_type="av_all_failed",
+            message=str(exc),
+            analysis_id=analysis_id,
+        )
+        # av_data stays None → all claims become unverified
+    finally:
+        client.close()
+
+    # Process each claim
+    cross_checked: list[tuple[dict, tuple[str, int, dict]]] = []
+    for claim_row in claims_rows:
+        result = _process_single_claim(claim_row, av_data)
+        if result is not None:
+            cross_checked.append((claim_row, result))
+
+    # Build summary
+    summary = _build_summary(
+        total_claims=len(claims_rows),
+        cross_checked_results=cross_checked,
+    )
+
+    # Write results to DB
+    failure = _write_verification_results(admin, analysis_id, cross_checked, summary)
+    if failure is not None:
+        return failure
+
+    return VerificationResult(
+        analysis_id=analysis_id,
+        status="completed",
+        summary=summary,
+        results_count=len(cross_checked),
+    )
+
+
+def _verify_preconditions(
+    admin, analysis_id: str, user_id: str,
+) -> tuple[str, list[dict]]:
+    """Phase A: validate ownership, fetch claims, check idempotency and API key.
+
+    Returns (ticker, claims_rows).
+    Raises PreconditionError or ConfigurationError on failure.
+    """
     # 1. Fetch analysis_run
     run_resp = (
         admin.table("analysis_runs")
@@ -275,50 +338,16 @@ def run_verification(analysis_id: str, user_id: str) -> VerificationResult:
     if not settings.alpha_vantage_api_key:
         raise ConfigurationError("Alpha Vantage API key not configured")
 
-    # --- Phase B: Execution ---
+    return run_row["ticker"], claims_rows
 
-    ticker = run_row["ticker"]
 
-    # Fetch AV data with retry (graceful degradation on failure)
-    av_data = None
-    client = AlphaVantageClient()
-    try:
-        av_data = retry_with_backoff(
-            lambda: client.get_fundamentals(ticker),
-            max_retries=2,  # 1 initial + 1 retry (AV has 25/day limit)
-            provider="alpha_vantage",
-            on_error=lambda exc, attempt: log_error(
-                component="verification",
-                error_type="av_fetch_failed",
-                message=f"AV attempt {attempt}: {exc}",
-                analysis_id=analysis_id,
-            ),
-        )
-    except DataProviderError as exc:
-        log_error(
-            component="verification",
-            error_type="av_all_failed",
-            message=str(exc),
-            analysis_id=analysis_id,
-        )
-        # av_data stays None → all claims become unverified
-    finally:
-        client.close()
+def _write_verification_results(
+    admin, analysis_id: str, cross_checked: list, summary: dict
+) -> VerificationResult | None:
+    """Batch INSERT verification_results and update analysis_runs summary.
 
-    # Process each claim
-    cross_checked: list[tuple[dict, tuple[str, int, dict]]] = []
-    for claim_row in claims_rows:
-        result = _process_single_claim(claim_row, av_data)
-        if result is not None:
-            cross_checked.append((claim_row, result))
-
-    # Build summary
-    summary = _build_summary(
-        total_claims=len(claims_rows),
-        cross_checked_results=cross_checked,
-    )
-
-    # Batch INSERT verification_results (only cross-checked claims)
+    Returns VerificationResult with status='failed' on DB error, None on success.
+    """
     rows_to_insert = [
         {
             "claim_id": claim["id"],
@@ -355,9 +384,4 @@ def run_verification(analysis_id: str, user_id: str) -> VerificationResult:
     except Exception as exc:
         logger.warning("Failed to update analysis_runs verification summary: %s", exc)
 
-    return VerificationResult(
-        analysis_id=analysis_id,
-        status="completed",
-        summary=summary,
-        results_count=len(rows_to_insert),
-    )
+    return None

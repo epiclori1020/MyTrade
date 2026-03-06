@@ -290,14 +290,15 @@ CREATE TABLE agent_cost_log (
 );
 
 -- FUTURE: Lern-Modus Fortschritt (nicht im MVP implementiert, keine Migration vorhanden)
-CREATE TABLE learning_progress (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id),
-  concept VARCHAR(100) NOT NULL,
-  status VARCHAR(20) DEFAULT 'in_progress',                -- learned, in_progress
-  quiz_score INTEGER,
-  last_session TIMESTAMPTZ DEFAULT NOW()
-);
+-- DO NOT copy into a migration — this table is not part of MVP.
+-- CREATE TABLE learning_progress (
+--   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--   user_id UUID NOT NULL REFERENCES auth.users(id),
+--   concept VARCHAR(100) NOT NULL,
+--   status VARCHAR(20) DEFAULT 'in_progress',              -- learned, in_progress
+--   quiz_score INTEGER,
+--   last_session TIMESTAMPTZ DEFAULT NOW()
+-- );
 ```
 
 ---

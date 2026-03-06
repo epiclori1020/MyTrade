@@ -37,34 +37,28 @@
 - [x] **T-014:** Strukturiertes Logging
 - [x] **T-012:** Graceful Shutdown
 
-## Batch 6: P2 Frontend + Testing
+## Batch 6: Quick-Wins + Security
+
+- [x] **T-034:** CORS allow_credentials Prod-Guard
+- [x] **T-020:** policy_change_log INSERT-RLS entfernen
+- [x] **T-029:** Composite Index (status, proposed_at/approved_at) auf trade_log
+- [x] **T-031:** use-push-subscription.ts entfernen
+- [x] **T-022:** Docs SSOT (learning_progress als FUTURE markieren)
+- [x] **T-015:** Budget Manager In-Memory Cache
+- [x] **T-028:** a11y Verbesserungen (Label/Input, PresetCards Space-Key)
+- [x] **T-030:** Security Headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
+
+## Batch 7: P3 Remaining
 
 - [ ] **T-011:** Frontend Tests erweitern (≥50 total)
-- [ ] **T-015:** Budget Manager In-Memory Cache
-
-## Batch 7: P3 Data Integrity
-
 - [ ] **T-016:** Portfolio Holdings Sync (Broker → DB)
 - [ ] **T-017:** Circuit Breaker Persistence
 - [ ] **T-019:** Claim Provenance deterministisch
-- [ ] **T-020:** policy_change_log INSERT-RLS entfernen
-
-## Batch 8: P3 Robustness
-
 - [ ] **T-023:** Idempotency für Trade-Propose
 - [x] **T-024:** CircuitBreakerOpenError in Approve-Flow catchen → umgesetzt in Batch 2 Trade-Hardening
-- [ ] **T-029:** Composite Index (status, proposed_at) auf trade_log
 - [ ] **T-032:** Große Funktionen aufteilen (>100 Zeilen)
-
-## Batch 9: P3 Hardening
-
 - [ ] **T-018:** E2E Browser Tests (Playwright, 5 Flows)
-- [ ] **T-022:** Docs SSOT (learning_progress + Legacy markieren)
-- [ ] **T-028:** a11y Verbesserungen (Label/Input, PresetCards)
-- [ ] **T-030:** Security Headers (CSP, frame-ancestors)
-- [ ] **T-031:** use-push-subscription.ts prüfen/entfernen
 - [ ] **T-033:** API Response-Envelope vereinheitlichen
-- [ ] **T-034:** CORS allow_credentials Prod-Guard
 
 ---
 
@@ -77,8 +71,6 @@
 | 3 | 3 | 3 | DONE (in Batch 2 Trade-Hardening) |
 | 4 | 3 | 3 | DONE |
 | 5 | 3 | 3 | DONE |
-| 6 | 2 | 0 | — |
-| 7 | 4 | 0 | — |
-| 8 | 4 | 1 | T-024 done (in Batch 2 Trade-Hardening) |
-| 9 | 7 | 0 | — |
-| **Total** | **34** | **18** | |
+| 6 | 8 | 8 | DONE |
+| 7 | 9 | 1 | T-024 done (in Batch 2 Trade-Hardening) |
+| **Total** | **34** | **26** | |

@@ -58,7 +58,12 @@ export function PresetCards({
               role="button"
               tabIndex={0}
               onClick={() => onSelect(id)}
-              onKeyDown={(e) => e.key === "Enter" && onSelect(id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelect(id);
+                }
+              }}
               className={cn(
                 "cursor-pointer transition-colors",
                 isSelected

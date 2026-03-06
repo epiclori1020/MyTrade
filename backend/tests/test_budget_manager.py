@@ -5,12 +5,14 @@ LLM spend queries are mocked via patch("src.services.budget_manager.get_supabase
 get_monthly_spend() is mocked directly for get_model_for_tier() and get_budget_status() tests.
 
 Structure:
-- TestGetMonthlySpend  — DB aggregation + fail-open behaviour
-- TestGetBudgetStatus  — remaining amounts, soft-cap warnings
-- TestGetModelForTier  — routing, degradation chain, BudgetExhaustedError
-- TestGetPricing       — per-model pricing lookup + unknown-model fallback
+- TestGetMonthlySpend      — DB aggregation + fail-open behaviour
+- TestGetBudgetStatus      — remaining amounts, soft-cap warnings
+- TestGetModelForTier      — routing, degradation chain, BudgetExhaustedError
+- TestGetPricing           — per-model pricing lookup + unknown-model fallback
+- TestBudgetManagerCache   — in-memory cache TTL, stale fallback, defensive copy
 """
 
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -30,6 +32,15 @@ from src.services.budget_manager import (
     get_pricing,
 )
 from src.services.exceptions import BudgetExhaustedError
+
+
+@pytest.fixture(autouse=True)
+def _reset_budget_cache():
+    """Reset in-memory spend cache before each test to prevent cross-test leakage."""
+    import src.services.budget_manager as bm
+
+    bm._spend_cache = None
+    bm._cache_timestamp = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -458,3 +469,98 @@ class TestGetPricing:
             assert pricing["output"] > pricing["input"], (
                 f"Expected output > input for {model_id}"
             )
+
+
+# ---------------------------------------------------------------------------
+# 5. In-memory spend cache (T-015)
+# ---------------------------------------------------------------------------
+
+
+class TestBudgetManagerCache:
+    """Tests for in-memory spend cache with TTL and stale fallback."""
+
+    def setup_method(self):
+        """Reset cache before each test (belt-and-suspenders with autouse fixture)."""
+        import src.services.budget_manager as bm
+
+        bm._spend_cache = None
+        bm._cache_timestamp = 0.0
+
+    @patch("src.services.budget_manager.get_supabase_admin")
+    def test_cache_hit_skips_db(self, mock_admin_fn):
+        """Second call within TTL returns cached value without DB query."""
+        mock_admin_fn.return_value = _mock_admin_with_rows(
+            [{"tier": "heavy", "cost_usd": 5.0}]
+        )
+
+        result1 = get_monthly_spend()
+        assert result1["heavy"] == 5.0
+        assert mock_admin_fn.call_count == 1
+
+        result2 = get_monthly_spend()
+        assert result2["heavy"] == 5.0
+        assert mock_admin_fn.call_count == 1  # NOT 2
+
+    @patch("src.services.budget_manager.get_supabase_admin")
+    @patch("src.services.budget_manager.time")
+    def test_cache_expires_after_ttl(self, mock_time, mock_admin_fn):
+        """After TTL expires, cache is refreshed from DB."""
+        mock_admin_fn.return_value = _mock_admin_with_rows(
+            [{"tier": "heavy", "cost_usd": 5.0}]
+        )
+
+        mock_time.monotonic.return_value = 1000.0
+        get_monthly_spend()
+        assert mock_admin_fn.call_count == 1
+
+        # Advance past TTL (300s)
+        mock_time.monotonic.return_value = 1301.0
+        get_monthly_spend()
+        assert mock_admin_fn.call_count == 2
+
+    @patch("src.services.budget_manager.get_supabase_admin")
+    @patch("src.services.budget_manager.time")
+    def test_stale_cache_on_db_error(self, mock_time, mock_admin_fn):
+        """DB error within stale window returns cached value instead of zeros."""
+        import src.services.budget_manager as bm
+
+        # Seed cache directly
+        bm._spend_cache = {"heavy": 10.0, "standard": 3.0, "light": 1.0}
+        bm._cache_timestamp = 1000.0
+
+        # Time is 6 minutes later (within 10min stale window)
+        mock_time.monotonic.return_value = 1360.0
+        mock_admin_fn.side_effect = Exception("DB down")
+
+        result = get_monthly_spend()
+        assert result["heavy"] == 10.0  # Stale cache, NOT 0.0
+
+    @patch("src.services.budget_manager.get_supabase_admin")
+    @patch("src.services.budget_manager.time")
+    def test_expired_cache_on_db_error_returns_zeros(self, mock_time, mock_admin_fn):
+        """DB error beyond stale window returns zeros (fail-open)."""
+        import src.services.budget_manager as bm
+
+        # Seed cache directly
+        bm._spend_cache = {"heavy": 10.0, "standard": 3.0, "light": 1.0}
+        bm._cache_timestamp = 1000.0
+
+        # Time is 11 minutes later (beyond 10min stale window)
+        mock_time.monotonic.return_value = 1661.0
+        mock_admin_fn.side_effect = Exception("DB down")
+
+        result = get_monthly_spend()
+        assert result["heavy"] == 0.0  # Zeros — cache too old
+
+    def test_cache_returns_defensive_copy(self):
+        """Callers cannot mutate the internal cache."""
+        import src.services.budget_manager as bm
+
+        bm._spend_cache = {"heavy": 5.0, "standard": 2.0, "light": 1.0}
+        bm._cache_timestamp = time.monotonic()
+
+        result = get_monthly_spend()
+        result["heavy"] = 999.0  # Mutate returned dict
+
+        # Internal cache must be unchanged
+        assert bm._spend_cache["heavy"] == 5.0

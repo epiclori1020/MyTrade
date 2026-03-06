@@ -14,6 +14,7 @@ Budget caps from docs/03_architecture/monitoring.md.
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -73,11 +74,29 @@ class ModelRouting:
     original_tier: str
 
 
+# --- In-memory cache for monthly spend ---
+_spend_cache: dict[str, float] | None = None
+_cache_timestamp: float = 0.0
+_CACHE_TTL_SECONDS: float = 300.0  # 5 minutes
+
+_ZERO_SPEND: dict[str, float] = {"heavy": 0.0, "standard": 0.0, "light": 0.0}
+
+
 def get_monthly_spend() -> dict[str, float]:
     """Read current month's spend from agent_cost_log, aggregated by tier.
 
-    Fail-open: returns zeros on DB error (allow calls when state is unknown).
+    Uses in-memory cache with 5-minute TTL to reduce DB load.
+    Fail-open: returns cached value on DB error (if cache < 10min old),
+    otherwise returns zeros (allow calls when state is unknown).
     """
+    global _spend_cache, _cache_timestamp
+
+    now = time.monotonic()
+
+    # Return cached value if fresh
+    if _spend_cache is not None and (now - _cache_timestamp) < _CACHE_TTL_SECONDS:
+        return dict(_spend_cache)
+
     try:
         admin = get_supabase_admin()
         first_of_month = datetime.now(timezone.utc).replace(
@@ -98,10 +117,19 @@ def get_monthly_spend() -> dict[str, float]:
             if tier in spend:
                 spend[tier] += cost
 
-        return spend
+        # Update cache on success
+        _spend_cache = spend
+        _cache_timestamp = now
+        return dict(spend)
+
     except Exception as exc:
         logger.warning("Failed to read monthly spend — fail-open: %s", exc)
-        return {"heavy": 0.0, "standard": 0.0, "light": 0.0}
+        # Stale cache fallback: if cache exists and is < 10 minutes old, use it
+        stale_limit = _CACHE_TTL_SECONDS * 2
+        if _spend_cache is not None and (now - _cache_timestamp) < stale_limit:
+            logger.info("Using stale cached spend (age: %.0fs)", now - _cache_timestamp)
+            return dict(_spend_cache)
+        return dict(_ZERO_SPEND)
 
 
 def get_budget_status() -> dict:

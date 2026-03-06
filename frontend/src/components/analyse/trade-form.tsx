@@ -150,12 +150,12 @@ export function TradeForm({ ticker, analysisId }: TradeFormProps) {
         {!proposedTrade && (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Aktion</Label>
+              <Label htmlFor="trade-action">Aktion</Label>
               <Select
                 value={action}
                 onValueChange={(v) => setAction(v as "BUY" | "SELL")}
               >
-                <SelectTrigger>
+                <SelectTrigger id="trade-action">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -166,8 +166,9 @@ export function TradeForm({ ticker, analysisId }: TradeFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>Stück</Label>
+              <Label htmlFor="trade-shares">Stück</Label>
               <Input
+                id="trade-shares"
                 type="number"
                 min="0.01"
                 step="0.01"
@@ -179,8 +180,9 @@ export function TradeForm({ ticker, analysisId }: TradeFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>Limit-Preis ($)</Label>
+              <Label htmlFor="trade-price">Limit-Preis ($)</Label>
               <Input
+                id="trade-price"
                 type="number"
                 min="0.01"
                 step="0.01"
@@ -192,11 +194,12 @@ export function TradeForm({ ticker, analysisId }: TradeFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>
+              <Label htmlFor="trade-stoploss">
                 Stop-Loss ($){" "}
                 <span className="text-muted-foreground">(optional)</span>
               </Label>
               <Input
+                id="trade-stoploss"
                 type="number"
                 min="0.01"
                 step="0.01"

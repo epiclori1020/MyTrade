@@ -50,15 +50,15 @@
 
 ## Batch 7: P3 Remaining
 
-- [ ] **T-011:** Frontend Tests erweitern (≥50 total)
-- [ ] **T-016:** Portfolio Holdings Sync (Broker → DB)
-- [ ] **T-017:** Circuit Breaker Persistence
-- [ ] **T-019:** Claim Provenance deterministisch
-- [ ] **T-023:** Idempotency für Trade-Propose
+- [x] **T-011:** Frontend Tests erweitern (52 total, 13 Dateien)
+- [ ] **T-016:** Portfolio Holdings Sync (Broker → DB) — deferred post-deploy
+- [x] **T-017:** Circuit Breaker Persistence (persist/restore + system_state CB columns)
+- [x] **T-019:** Claim Provenance deterministisch (hardcoded finnhub, LLM source ignored)
+- [x] **T-023:** Idempotency für Trade-Propose (5-eq SELECT before INSERT)
 - [x] **T-024:** CircuitBreakerOpenError in Approve-Flow catchen → umgesetzt in Batch 2 Trade-Hardening
-- [ ] **T-032:** Große Funktionen aufteilen (>100 Zeilen)
-- [ ] **T-018:** E2E Browser Tests (Playwright, 5 Flows)
-- [ ] **T-033:** API Response-Envelope vereinheitlichen
+- [x] **T-032:** Große Funktionen aufteilen (alle ≤100 Zeilen)
+- [ ] **T-018:** E2E Browser Tests (Playwright, 5 Flows) — deferred post-deploy
+- [x] **T-033:** API Response-Envelope (request_id in errors, count in lists, positions-table fix)
 
 ---
 
@@ -72,5 +72,5 @@
 | 4 | 3 | 3 | DONE |
 | 5 | 3 | 3 | DONE |
 | 6 | 8 | 8 | DONE |
-| 7 | 9 | 1 | T-024 done (in Batch 2 Trade-Hardening) |
-| **Total** | **34** | **26** | |
+| 7 | 9 | 7 | T-016, T-018 deferred post-deploy |
+| **Total** | **34** | **32** | 2 deferred (T-016, T-018) |

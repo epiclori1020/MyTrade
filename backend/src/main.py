@@ -16,6 +16,7 @@ from src.dependencies.rate_limit import limiter, rate_limit_exceeded_handler
 from src.dependencies.request_context import (
     RequestContextFilter,
     request_context_dispatch,
+    request_id_var,
 )
 from src.routes import analysis, claims, data, health, policy, system, trades, verification
 
@@ -102,6 +103,14 @@ async def lifespan(_app: FastAPI):
     """Startup/shutdown lifecycle."""
     _configure_logging()
     logger.info("MyTrade API starting", extra={"environment": settings.environment})
+
+    # Restore circuit breaker state from DB (best-effort)
+    try:
+        from src.services.circuit_breaker import restore_alpaca_cb
+        restore_alpaca_cb()
+    except Exception:
+        logger.warning("Failed to restore circuit breaker state", exc_info=True)
+
     yield
     # --- Graceful Shutdown ---
     logger.info("MyTrade API shutting down — cleaning up resources")
@@ -146,6 +155,7 @@ async def http_exception_handler(_request: Request, exc: StarletteHTTPException)
             "error": exc.detail if isinstance(exc.detail, str) else "error",
             "detail": exc.detail,
             "status_code": exc.status_code,
+            "request_id": request_id_var.get(),
         },
     )
 
@@ -161,6 +171,7 @@ async def validation_exception_handler(
             "error": "validation_error",
             "detail": exc.errors(),
             "status_code": 422,
+            "request_id": request_id_var.get(),
         },
     )
 
@@ -175,6 +186,7 @@ async def generic_exception_handler(_request: Request, _exc: Exception) -> JSONR
             "error": "internal_server_error",
             "detail": "An unexpected error occurred.",
             "status_code": 500,
+            "request_id": request_id_var.get(),
         },
     )
 

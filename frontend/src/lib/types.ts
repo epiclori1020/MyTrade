@@ -229,6 +229,16 @@ export interface Position {
   market_value: number;
 }
 
+export interface PositionsResponse {
+  positions: Position[];
+  count?: number;
+}
+
+export interface TradesListResponse {
+  trades: TradeResponse[];
+  count?: number;
+}
+
 export interface BrokerAccount {
   total_value: number;
   cash: number;

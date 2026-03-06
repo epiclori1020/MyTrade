@@ -49,6 +49,11 @@ def _make_mock_admin_for_propose(stop_loss=None):
     admin.table.return_value.insert.return_value.execute.return_value = SimpleNamespace(
         data=[row]
     )
+    # Idempotency check: 5-eq SELECT chain returns empty (no duplicate)
+    eq5 = admin.table.return_value.select.return_value
+    for _ in range(5):
+        eq5 = eq5.eq.return_value
+    eq5.execute.return_value = SimpleNamespace(data=[])
     return admin
 
 

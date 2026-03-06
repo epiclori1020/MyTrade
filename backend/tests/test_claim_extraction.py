@@ -257,6 +257,38 @@ class TestPostProcessClaims:
         assert processed[0]["claim_id"] == f"{FAKE_ANALYSIS_ID}_001"
         assert processed[1]["claim_id"] == f"{FAKE_ANALYSIS_ID}_002"
 
+    def test_llm_source_spoofing_ignored(self):
+        """T-019: LLM claiming sec_edgar source gets overridden to finnhub."""
+        raw = [{
+            "claim_text": "Revenue: $100B",
+            "claim_type": "number",
+            "value": 100_000_000_000,
+            "unit": "USD",
+            "ticker": "AAPL",
+            "period": "FY2025",
+            "source": "sec_edgar",  # LLM trying to spoof Tier A
+            "retrieved_at": "2026-01-01T00:00:00Z",
+        }]
+        result = _post_process_claims(raw, "test-id", "AAPL")
+        assert result[0]["source_primary"]["provider"] == "finnhub"  # NOT sec_edgar
+        assert result[0]["tier"] == "B"  # NOT "A"
+
+    def test_missing_retrieved_at_handled(self):
+        """T-019: raw.get('retrieved_at', '') handles missing field gracefully."""
+        raw = [{
+            "claim_text": "EPS: $6.50",
+            "claim_type": "number",
+            "value": 6.50,
+            "unit": "USD",
+            "ticker": "AAPL",
+            "period": "TTM",
+            "source": "finnhub",
+            # No retrieved_at field
+        }]
+        result = _post_process_claims(raw, "test-id", "AAPL")
+        assert result[0]["source_primary"]["provider"] == "finnhub"
+        assert result[0]["source_primary"]["retrieved_at"] == ""
+
 
 # --- Phase A Pre-Condition Tests ---
 

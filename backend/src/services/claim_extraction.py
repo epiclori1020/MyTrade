@@ -125,6 +125,8 @@ def _post_process_claims(
 
     Adds: claim_id, tier, required_tier, trade_critical, source_primary, status.
     Forces: value=None for opinion/event/forecast claims.
+    Source provenance is deterministic — always 'finnhub' in MVP (the only
+    data provider). LLM-supplied source field is ignored to prevent spoofing.
     """
     processed = []
     for i, raw in enumerate(raw_claims):
@@ -135,7 +137,9 @@ def _post_process_claims(
         value = raw["value"] if claim_type in ("number", "ratio") else None
 
         trade_critical = _determine_trade_critical(claim_text)
-        tier = _determine_tier(raw["source"])
+        # MVP: Data always comes from Finnhub — ignore LLM-supplied source
+        source = "finnhub"
+        tier = _determine_tier(source)
         required_tier = _determine_required_tier(trade_critical, claim_type)
 
         processed.append({
@@ -147,7 +151,7 @@ def _post_process_claims(
             "unit": raw["unit"],
             "ticker": ticker.upper(),
             "period": raw["period"],
-            "source_primary": _build_source_primary(raw["source"], raw["retrieved_at"]),
+            "source_primary": _build_source_primary(source, raw.get("retrieved_at", "")),
             "tier": tier,
             "required_tier": required_tier,
             "trade_critical": trade_critical,
@@ -204,17 +208,66 @@ def run_claim_extraction(analysis_id: str, user_id: str) -> ClaimExtractionResul
     # --- Phase B: LLM Execution (tokens will be consumed) ---
 
     default_model = "claude-haiku-4-5"
-    usage = {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "model_used": default_model}
-    raw_claims = None
-    error_message = None
-    routing = None
+    raw_claims, usage, error_message, routing = _call_extractor_safe(
+        ticker, fundamental_out, analysis_id, default_model,
+    )
 
+    # Step 6: Post-process and write claims
+    processed_claims = None
+    claims_count = 0
+
+    if raw_claims is not None:
+        processed_claims = _post_process_claims(raw_claims, analysis_id, ticker)
+        claims_count = len(processed_claims)
+
+        if processed_claims:
+            success = _persist_claims(admin, processed_claims, analysis_id)
+            if not success:
+                return ClaimExtractionResult(
+                    analysis_id=analysis_id,
+                    status="failed",
+                    claims_count=0,
+                    tokens_used=usage["input_tokens"] + usage["output_tokens"],
+                    cost_usd=usage["cost_usd"],
+                    error_message="Failed to write claims to DB",
+                )
+
+    # Step 7: Calculate token totals and log cost
+    input_tokens = usage.get("input_tokens", 0)
+    output_tokens = usage.get("output_tokens", 0)
+    total_tokens = input_tokens + output_tokens
+    cost_usd = usage.get("cost_usd", 0.0)
+
+    _log_extraction_cost(admin, analysis_id, usage, routing, default_model, run_row)
+
+    status = "completed" if raw_claims is not None else "failed"
+
+    return ClaimExtractionResult(
+        analysis_id=analysis_id,
+        status=status,
+        claims_count=claims_count,
+        claims=processed_claims,
+        tokens_used=total_tokens,
+        cost_usd=cost_usd,
+        error_message=error_message,
+    )
+
+
+def _call_extractor_safe(
+    ticker: str, fundamental_out: dict, analysis_id: str, default_model: str,
+) -> tuple[list[dict] | None, dict, str | None, object]:
+    """Call the LLM claim extractor with error handling.
+
+    Returns (raw_claims, usage, error_message, routing).
+    BudgetExhaustedError is re-raised (must propagate for 503 response).
+    """
+    usage = {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "model_used": default_model}
     try:
         raw_claims, usage, routing = call_claim_extractor(ticker, fundamental_out)
+        return raw_claims, usage, None, routing
     except BudgetExhaustedError:
-        raise  # Must propagate to route handler for 503 response
+        raise
     except AgentError as exc:
-        error_message = str(exc)
         if exc.usage:
             usage = {
                 "input_tokens": exc.usage.get("input_tokens", 0),
@@ -229,8 +282,8 @@ def run_claim_extraction(analysis_id: str, user_id: str) -> ClaimExtractionResul
             message=str(exc),
             analysis_id=analysis_id,
         )
+        return None, usage, str(exc), None
     except Exception as exc:
-        error_message = f"Unexpected error: {exc}"
         logger.error(
             "Unexpected claim extraction error for %s: %s",
             analysis_id, exc, exc_info=True,
@@ -241,87 +294,65 @@ def run_claim_extraction(analysis_id: str, user_id: str) -> ClaimExtractionResul
             message=str(exc),
             analysis_id=analysis_id,
         )
+        return None, usage, f"Unexpected error: {exc}", None
 
-    # Step 6: Post-process and write claims
-    processed_claims = None
-    claims_count = 0
 
-    if raw_claims is not None:
-        processed_claims = _post_process_claims(raw_claims, analysis_id, ticker)
-        claims_count = len(processed_claims)
+def _persist_claims(admin, processed_claims: list[dict], analysis_id: str) -> bool:
+    """Batch INSERT claims into DB with retry + queue fallback.
 
-        # Batch INSERT into claims table (with retry + queue fallback)
-        if processed_claims:
-            success = supabase_write_with_retry(
-                lambda: admin.table("claims").insert(processed_claims).execute(),
-                description=f"claims insert for {analysis_id}",
-            )
-            if not success:
-                error_message = "Failed to write claims to DB"
-                logger.error("Failed to insert claims for %s (queued)", analysis_id)
-                # Claims were extracted but not persisted — report as failed
-                return ClaimExtractionResult(
-                    analysis_id=analysis_id,
-                    status="failed",
-                    claims_count=0,
-                    tokens_used=usage["input_tokens"] + usage["output_tokens"],
-                    cost_usd=usage["cost_usd"],
-                    error_message=error_message,
-                )
+    Returns True on success, False on failure.
+    """
+    success = supabase_write_with_retry(
+        lambda: admin.table("claims").insert(processed_claims).execute(),
+        description=f"claims insert for {analysis_id}",
+    )
+    if not success:
+        logger.error("Failed to insert claims for %s (queued)", analysis_id)
+    return success
 
-    # Step 7: Calculate token totals
+
+def _log_extraction_cost(
+    admin, analysis_id: str, usage: dict, routing, default_model: str, run_row: dict
+) -> None:
+    """Log extraction cost to agent_cost_log and update analysis_runs. Best-effort."""
     input_tokens = usage.get("input_tokens", 0)
     output_tokens = usage.get("output_tokens", 0)
     total_tokens = input_tokens + output_tokens
     cost_usd = usage.get("cost_usd", 0.0)
     model_used = usage.get("model_used", default_model)
 
-    # Step 8: Log to agent_cost_log (best-effort)
-    if total_tokens > 0:
-        tier = routing.tier if routing else ("standard" if "sonnet" in model_used else "light")
-        is_quality_fallback = routing is not None and model_used != routing.model_id
-        try:
-            admin.table("agent_cost_log").insert({
-                "analysis_id": analysis_id,
-                "agent_name": "claim_extractor",
-                "model": model_used,
-                "tier": tier,
-                "effort": "low",
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "cache_read_tokens": 0,
-                "cost_usd": cost_usd,
-                "fallback_from": default_model if is_quality_fallback else (
-                    routing.original_tier if routing and routing.degraded else None
-                ),
-                "degraded": routing.degraded if routing else False,
-            }).execute()
-        except Exception as exc:
-            logger.warning("Failed to log agent cost: %s", exc)
+    if total_tokens <= 0:
+        return
 
-    # Step 9: Update analysis_runs cumulative cost (best-effort)
-    # Note: This is a read-then-update without transaction — race condition
-    # possible with concurrent requests. Acceptable for MVP (single user,
-    # manual trigger). Would need SELECT FOR UPDATE in production.
-    if total_tokens > 0:
-        try:
-            existing_tokens = run_row.get("total_tokens") or 0
-            existing_cost = float(run_row.get("total_cost_usd") or 0)
-            admin.table("analysis_runs").update({
-                "total_tokens": existing_tokens + total_tokens,
-                "total_cost_usd": existing_cost + cost_usd,
-            }).eq("id", analysis_id).execute()
-        except Exception as exc:
-            logger.warning("Failed to update analysis_runs cost: %s", exc)
+    tier = routing.tier if routing else ("standard" if "sonnet" in model_used else "light")
+    is_quality_fallback = routing is not None and model_used != routing.model_id
+    try:
+        admin.table("agent_cost_log").insert({
+            "analysis_id": analysis_id,
+            "agent_name": "claim_extractor",
+            "model": model_used,
+            "tier": tier,
+            "effort": "low",
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_tokens": 0,
+            "cost_usd": cost_usd,
+            "fallback_from": default_model if is_quality_fallback else (
+                routing.original_tier if routing and routing.degraded else None
+            ),
+            "degraded": routing.degraded if routing else False,
+        }).execute()
+    except Exception as exc:
+        logger.warning("Failed to log agent cost: %s", exc)
 
-    status = "completed" if raw_claims is not None else "failed"
-
-    return ClaimExtractionResult(
-        analysis_id=analysis_id,
-        status=status,
-        claims_count=claims_count,
-        claims=processed_claims,
-        tokens_used=total_tokens,
-        cost_usd=cost_usd,
-        error_message=error_message,
-    )
+    # Update analysis_runs cumulative cost (best-effort)
+    # Note: read-then-update without transaction — acceptable for MVP single user.
+    try:
+        existing_tokens = run_row.get("total_tokens") or 0
+        existing_cost = float(run_row.get("total_cost_usd") or 0)
+        admin.table("analysis_runs").update({
+            "total_tokens": existing_tokens + total_tokens,
+            "total_cost_usd": existing_cost + cost_usd,
+        }).eq("id", analysis_id).execute()
+    except Exception as exc:
+        logger.warning("Failed to update analysis_runs cost: %s", exc)

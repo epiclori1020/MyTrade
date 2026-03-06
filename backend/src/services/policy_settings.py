@@ -4,10 +4,13 @@ Extracted from routes/policy.py (T-009 SoC refactoring).
 The route handler validates input (Pydantic) and calls these functions.
 """
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 from src.services.policy_engine import CONSTRAINTS
 from src.services.supabase import get_supabase_admin
+
+logger = logging.getLogger(__name__)
 
 
 class OverrideValidationError(ValueError):
@@ -89,16 +92,23 @@ def update_user_policy(
 
     admin.table("user_policy").upsert(row, on_conflict="user_id").execute()
 
-    # Write change log
-    admin.table("policy_change_log").insert({
-        "user_id": user_id,
-        "old_mode": old_mode,
-        "new_mode": policy_mode,
-        "old_preset": old_preset,
-        "new_preset": preset_id,
-        "old_overrides": old_overrides,
-        "new_overrides": effective_overrides,
-    }).execute()
+    # Write change log (best-effort — policy upsert is the primary operation)
+    try:
+        admin.table("policy_change_log").insert({
+            "user_id": user_id,
+            "old_mode": old_mode,
+            "new_mode": policy_mode,
+            "old_preset": old_preset,
+            "new_preset": preset_id,
+            "old_overrides": old_overrides,
+            "new_overrides": effective_overrides,
+        }).execute()
+    except Exception as exc:  # Broad catch: audit log must never crash policy update
+        logger.error(
+            "Failed to write policy_change_log for user %s "
+            "(old=%s/%s, new=%s/%s): %s",
+            user_id, old_mode, old_preset, policy_mode, preset_id, exc,
+        )
 
     return {
         "policy_mode": policy_mode,

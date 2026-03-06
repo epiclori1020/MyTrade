@@ -207,6 +207,7 @@ def _fetch_news(
         msg = f"News fetch failed: {exc}"
         logger.warning(msg)
         result.errors.append(msg)
+        log_error("data_collector", "news_fetch_failed", str(exc))
         return []
 
 
@@ -220,6 +221,7 @@ def _fetch_insider_transactions(
         msg = f"Insider transactions fetch failed: {exc}"
         logger.warning(msg)
         result.errors.append(msg)
+        log_error("data_collector", "insider_fetch_failed", str(exc))
         return []
 
 

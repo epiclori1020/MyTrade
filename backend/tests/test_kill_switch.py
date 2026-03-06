@@ -25,6 +25,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.services.kill_switch import (
+    DEFAULT_DRAWDOWN_PCT,
     RECENT_ANALYSES_COUNT,
     SYSTEM_STATE_ID,
     VERIFICATION_RATE_THRESHOLD,
@@ -635,7 +636,7 @@ class TestCheckDrawdownTrigger:
 
         # 25% > 20% fallback threshold -> triggered
         assert result["triggered"] is True
-        assert result["threshold_pct"] == 20.0
+        assert result["threshold_pct"] == DEFAULT_DRAWDOWN_PCT
 
     @patch("src.services.kill_switch.get_supabase_admin")
     def test_system_state_unreadable_returns_not_triggered(self, mock_admin_fn):

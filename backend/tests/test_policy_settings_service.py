@@ -244,3 +244,32 @@ class TestUpdateUserPolicy:
                 preset_id="balanced",
                 effective_overrides={},
             )
+
+    @patch("src.services.policy_settings.get_supabase_admin")
+    def test_changelog_failure_does_not_crash_policy_update(self, mock_get_admin):
+        """Changelog insert failure must not prevent policy update from returning."""
+        existing_row = {
+            "policy_mode": "BEGINNER",
+            "preset_id": "beginner",
+            "policy_overrides": {},
+            "cooldown_until": None,
+        }
+        mock_admin, _, change_log_table = _make_mock_admin(select_data=[existing_row])
+        mock_get_admin.return_value = mock_admin
+
+        # Make changelog insert raise
+        change_log_table.insert.return_value.execute.side_effect = Exception(
+            "DB write failed"
+        )
+
+        # Policy update must still succeed
+        result = update_user_policy(
+            user_id="user-006",
+            policy_mode="PRESET",
+            preset_id="balanced",
+            effective_overrides={},
+        )
+
+        assert result["policy_mode"] == "PRESET"
+        assert result["preset_id"] == "balanced"
+        assert result["cooldown_until"] is not None  # mode changed → cooldown

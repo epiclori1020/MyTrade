@@ -113,3 +113,32 @@ class TestHandleServiceErrors:
             return a + b + c
 
         assert fn(1, 2, c=10) == 13
+
+
+class TestHandleServiceErrorsAsync:
+    @pytest.mark.asyncio
+    async def test_async_success(self):
+        @handle_service_errors(service_name="Test")
+        async def fn():
+            return {"ok": True}
+
+        assert await fn() == {"ok": True}
+
+    @pytest.mark.asyncio
+    async def test_async_exception_maps(self):
+        @handle_service_errors(service_name="Test")
+        async def fn():
+            raise ConfigurationError("missing key")
+
+        with pytest.raises(HTTPException) as exc_info:
+            await fn()
+        assert exc_info.value.status_code == 503
+        assert "not configured" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_async_preserves_name(self):
+        @handle_service_errors(service_name="Test")
+        async def my_async_endpoint():
+            pass
+
+        assert my_async_endpoint.__name__ == "my_async_endpoint"

@@ -2,6 +2,7 @@
 
 Eliminates repetitive try-except blocks across route files.
 Each exception type maps to a fixed HTTP status code with a safe error message.
+Supports both sync and async endpoints via auto-detection.
 
 Usage:
     @router.post("/analyze/{ticker}")
@@ -11,6 +12,7 @@ Usage:
         ...
 """
 
+import asyncio
 import functools
 import logging
 
@@ -43,55 +45,71 @@ def handle_service_errors(
         @handle_service_errors  <- innermost (closest to function)
     """
 
+    def _handle_exception(exc: Exception):
+        """Map exception to HTTPException. Always raises."""
+        if isinstance(exc, HTTPException):
+            raise exc
+        if isinstance(exc, PreconditionError):
+            raise HTTPException(
+                status_code=precondition_status, detail=str(exc)
+            )
+        if isinstance(exc, BudgetExhaustedError):
+            raise HTTPException(
+                status_code=503,
+                detail="Monthly API budget exhausted. Try again next month.",
+            )
+        # CircuitBreakerOpenError BEFORE BrokerError (siblings, not parent-child)
+        if isinstance(exc, CircuitBreakerOpenError):
+            logger.warning(
+                "Circuit breaker open in %s: %s", service_name, exc
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Broker temporarily unavailable — circuit breaker active",
+            )
+        if isinstance(exc, BrokerError):
+            logger.error("Broker error in %s: %s", service_name, exc)
+            raise HTTPException(
+                status_code=502,
+                detail="Broker temporarily unavailable",
+            )
+        if isinstance(exc, ConfigurationError):
+            logger.error(
+                "Configuration error in %s: %s", service_name, exc
+            )
+            raise HTTPException(
+                status_code=503,
+                detail=f"{service_name} not configured",
+            )
+        # Catch-all for unexpected exceptions
+        logger.error(
+            "Unexpected error in %s: %s",
+            service_name,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=f"{service_name} temporarily unavailable",
+        )
+
     def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as exc:
+                    _handle_exception(exc)
+
+            return async_wrapper
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except HTTPException:
-                raise
-            except PreconditionError as exc:
-                raise HTTPException(
-                    status_code=precondition_status, detail=str(exc)
-                )
-            except BudgetExhaustedError:
-                raise HTTPException(
-                    status_code=503,
-                    detail="Monthly API budget exhausted. Try again next month.",
-                )
-            except CircuitBreakerOpenError as exc:
-                logger.warning(
-                    "Circuit breaker open in %s: %s", service_name, exc
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail="Broker temporarily unavailable — circuit breaker active",
-                )
-            except BrokerError as exc:
-                logger.error("Broker error in %s: %s", service_name, exc)
-                raise HTTPException(
-                    status_code=502,
-                    detail="Broker temporarily unavailable",
-                )
-            except ConfigurationError as exc:
-                logger.error(
-                    "Configuration error in %s: %s", service_name, exc
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"{service_name} not configured",
-                )
             except Exception as exc:
-                logger.error(
-                    "Unexpected error in %s: %s",
-                    service_name,
-                    exc,
-                    exc_info=True,
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"{service_name} temporarily unavailable",
-                )
+                _handle_exception(exc)
 
         return wrapper
 

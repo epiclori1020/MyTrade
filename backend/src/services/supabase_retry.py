@@ -95,7 +95,7 @@ def _flush_queue() -> int:
             try:
                 fn()
                 flushed += 1
-            except Exception:
+            except Exception:  # Broad catch: failed flush items re-queued, not lost
                 remaining.append(fn)
         _write_queue.extend(remaining)
 

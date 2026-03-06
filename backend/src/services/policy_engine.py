@@ -439,7 +439,7 @@ def run_full_policy(trade_proposal: TradeProposal, user_id: str) -> PolicyResult
             if state_resp.data and state_resp.data[0].get("highwater_mark_value")
             else Decimal("0")
         )
-    except Exception:
+    except (KeyError, ValueError, TypeError):
         highwater = Decimal("0")  # No highwater → no drawdown check (fail-open for full-policy)
 
     drawdown = _calculate_portfolio_drawdown(holdings, highwater)

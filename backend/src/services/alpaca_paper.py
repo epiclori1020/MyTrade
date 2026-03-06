@@ -110,7 +110,7 @@ class AlpacaPaperAdapter(BrokerAdapter):
             alpaca_breaker.record_success()
             try:
                 error_body = exc.response.json() if exc.response.content else {}
-            except Exception:
+            except (ValueError, KeyError):
                 error_body = {}
             error_msg = error_body.get("message", str(exc.response.status_code))
             logger.error("Alpaca order rejected: %s", error_msg)

@@ -82,7 +82,7 @@ class TestVerifyClaimsEndpoint:
 
         assert resp.status_code == 503
         assert "Alpha Vantage" not in resp.json()["detail"]
-        assert "temporarily unavailable" in resp.json()["detail"]
+        assert "not configured" in resp.json()["detail"]
 
     @patch("src.routes.verification.run_verification")
     def test_unexpected_error_returns_503_sanitized(self, mock_run, auth_client):

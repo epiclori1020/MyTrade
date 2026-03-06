@@ -246,7 +246,7 @@ def _check_drawdown_trigger(user_id: str) -> dict:
         try:
             policy = get_effective_policy(user_id)
             threshold = policy.max_drawdown_pct
-        except Exception:
+        except Exception:  # Broad catch: policy-load failure uses YAML fallback
             threshold = 20.0  # YAML fallback default
 
         triggered = drawdown >= threshold

@@ -47,6 +47,6 @@ def check_db_health() -> bool:
         admin = get_supabase_admin()
         admin.table("user_policy").select("id").limit(1).execute()
         return True
-    except Exception:
+    except Exception:  # Broad catch: health check must never raise
         logger.warning("DB health check failed", exc_info=True)
         return False
